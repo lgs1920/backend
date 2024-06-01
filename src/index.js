@@ -7,7 +7,7 @@ import { ChangelogResource } from './resources/ChangelogResource'
 
 export const CHANGELOG_ROUTE = 'changelog'
 export const BACKEND='../backend/'
-export const FRONTEND = '../frontend/'
+export const STUDIO = '../studio/'
 
 // Declares used resources
 const resources = new Map([

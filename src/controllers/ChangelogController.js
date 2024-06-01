@@ -1,6 +1,6 @@
 import *   as fspromises from 'node:fs/promises'
 import * as path         from 'node:path'
-import { FRONTEND }      from '../index'
+import { STUDIO }      from '../index'
 import { FileUtils }     from '../utils/FileUtils'
 
 export class ChangelogController {
@@ -19,7 +19,7 @@ export class ChangelogController {
      * @return {Promise<{last: *, files: *}>}
      */
     list = async (context) => {
-        const directory = `${FRONTEND}${this.CHANGELOG_DIR}`
+        const directory = `${STUDIO}${this.CHANGELOG_DIR}`
         let extension = context.query.extension
         if (extension && !extension.startsWith('.')) {
             extension = `.${extension}`;
