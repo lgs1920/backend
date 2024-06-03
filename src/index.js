@@ -2,16 +2,20 @@ import cors             from '@elysiajs/cors'
 import swagger          from '@elysiajs/swagger'
 import { Elysia }       from 'elysia'
 import configuration    from '../config.json'
+
+
 import version               from '../version.json'
 import { ChangelogResource } from './resources/ChangelogResource'
+import { VersionsResource } from './resources/VersionsResource'
 
 export const CHANGELOG_ROUTE = 'changelog'
-export const BACKEND='../backend/'
-export const STUDIO = '../studio/'
+export const VERSIONS_ROUTE = 'versions'
+
 
 // Declares used resources
 const resources = new Map([
-                              [CHANGELOG_ROUTE,new ChangelogResource()]
+                              [CHANGELOG_ROUTE,new ChangelogResource()],
+                              [VERSIONS_ROUTE,new VersionsResource()]
                           ])
 const app = new Elysia()
     /**
@@ -21,7 +25,7 @@ const app = new Elysia()
                      documentation: {
                          info:    {
                              title:   configuration.server.name,
-                             version: version.backend,
+                             version: version.api,
                          },
                          tags:    [
                              {name: 'file', description: 'file endpoints'},
@@ -42,16 +46,12 @@ const app = new Elysia()
         set.redirect = '/swagger'
     })
 
-    /**
-     * Changelog Routes
-     */
+    // Routes
     .use(resources.get(CHANGELOG_ROUTE).resource)
+    .use(resources.get(VERSIONS_ROUTE).resource)
 
-    .use(cors({origin: 'localhost:5173'}))
+    .use(cors({origin: /^https?:\/\/(?:localhost|localhost:5173|localhost:4173|studio\.lgs1920.fr)(?::\d+)?\/?$/}))
     .listen(configuration.server.port)
-
-
-
 
 console.log(
   `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`

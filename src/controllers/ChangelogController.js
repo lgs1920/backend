@@ -1,14 +1,11 @@
 import *   as fspromises from 'node:fs/promises'
-import * as path         from 'node:path'
-import { STUDIO }      from '../index'
-import { FileUtils }     from '../utils/FileUtils'
+import * as path               from 'node:path'
+import { FileUtils }           from '../utils/FileUtils'
+import { Controller } from './Controller'
 
-export class ChangelogController {
+export class ChangelogController extends Controller {
 
-    CHANGELOG_DIR = 'public/changelog/'
-
-    constructor() {
-    }
+    CHANGELOG_DIR = 'changelog'
 
     /**
      * List all changelog files
@@ -19,7 +16,8 @@ export class ChangelogController {
      * @return {Promise<{last: *, files: *}>}
      */
     list = async (context) => {
-        const directory = `${STUDIO}${this.CHANGELOG_DIR}`
+        const directory = this.setPublicDirectoryName(this.CHANGELOG_DIR)
+        console.log(this.CHANGELOG_DIR,directory)
         let extension = context.query.extension
         if (extension && !extension.startsWith('.')) {
             extension = `.${extension}`;

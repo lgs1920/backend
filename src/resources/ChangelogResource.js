@@ -5,7 +5,6 @@ import { CHANGELOG_ROUTE }     from '../index'
 
 export class ChangelogResource {
 
-    TAGS = ['file']
     controller = new ChangelogController()
 
     constructor() {
