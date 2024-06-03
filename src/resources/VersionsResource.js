@@ -8,8 +8,8 @@ export class VersionsResource {
     controller = new VersionsController()
 
     constructor() {
-        this.resource = new Elysia({prefix: `${VERSIONS_ROUTE}`})
-            .get('/',
+        this.resource = new Elysia({})
+            .get(`${VERSIONS_ROUTE}`,
                  this.controller.versions,
                  {
                      detail: {
