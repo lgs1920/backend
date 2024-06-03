@@ -3,6 +3,7 @@ export class Controller {
 
       BACKEND='../backend/'
       STUDIO = '../studio/'
+    ASSETS = 'assets/'
 
     constructor() {
     }
@@ -10,10 +11,21 @@ export class Controller {
     setStudioWorkingDirectory= () => {
         return process.env.NODE_ENV==='production'?`${this.STUDIO}dist/`:this.STUDIO
     }
-    setPublicName= (name) => {
+
+
+    setPublicFilePath = (name) => {
         return  `${this.setStudioWorkingDirectory()}${process.env.NODE_ENV==='production'?'':'public/'}${name}`
     }
-    setPublicDirectoryName= (name) => {
-      return this.setPublicName(name)+'/'
+
+    setPublicDirectoryPath =(name) => {
+        return this.setPublicFilePath(name)+'/'
+    }
+
+    setAssetFilePath= (name) => {
+        return this.setPublicFilePath(`${this.ASSETS}${name}`)
+    }
+
+    setAssetDirectoryPath= (name) => {
+        return this.setAssetFilePath(name)+'/'
     }
 }

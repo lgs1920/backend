@@ -9,7 +9,7 @@ export class VersionsController extends Controller{
      */
     versions = async () => {
         const backend = await Bun.file('./version.json').json()
-        const studio =  await Bun.file(this.setPublicName('version.json')).json()
+        const studio =  await Bun.file(this.setPublicFilePath('version.json')).json()
         return  {...studio,...backend}
     }
 
