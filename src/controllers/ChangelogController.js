@@ -17,7 +17,6 @@ export class ChangelogController extends Controller {
      */
     list = async (context) => {
         const directory = this.setAssetDirectoryPath(this.CHANGELOG_DIR)
-        console.log(this.CHANGELOG_DIR,directory)
         let extension = context.query.extension
         if (extension && !extension.startsWith('.')) {
             extension = `.${extension}`;
