@@ -27,5 +27,23 @@ export class ChangelogResource {
                          },
                      },
                  })
+            .get('/read/:file',
+                 this.controller.read,
+                 {
+                     detail: {
+                         tags:        this.tags,
+                         description: 'Read changelog file',
+                         produces:    ['application/json'],
+                         // consumes:    ['application/json'],
+                         responses:   {
+                             200: {
+                                 description: 'The listing you requested',
+                             },
+                             500: {
+                                 description: 'Internal error',
+                             },
+                         },
+                     },
+                 })
     }
 }

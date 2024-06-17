@@ -1,8 +1,9 @@
 export class Controller {
 
-
-      BACKEND='../backend/'
-      STUDIO = '../studio/'
+    // Relative path from api to studio and vice versa
+    BACKEND='../backend/'
+    // In production we are in dist... so ../.. instead of ..
+    STUDIO = `../${process.env.NODE_ENV === 'production' ? '../' : ''}studio/`
     ASSETS = 'assets/'
 
     constructor() {
@@ -14,7 +15,7 @@ export class Controller {
 
 
     setPublicFilePath = (name) => {
-        return  `${this.setStudioWorkingDirectory()}${process.env.NODE_ENV==='production'?'':'public/'}${name}`
+        return `${this.setStudioWorkingDirectory()}${process.env.NODE_ENV === 'production' ? '/' : 'public/'}${name}`
     }
 
     setPublicDirectoryPath =(name) => {

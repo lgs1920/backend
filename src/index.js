@@ -32,7 +32,7 @@ const app = new Elysia()
                          ],
                          servers: [
                              {
-                                 url:         `http://localhost:${configuration.server.port}`,
+                                 url:         `https://localhost:${configuration.server.port}`,
                                  description: '',
                              },
                          ],
@@ -49,8 +49,9 @@ const app = new Elysia()
     // Routes
     .use(resources.get(CHANGELOG_ROUTE).resource)
     .use(resources.get(VERSIONS_ROUTE).resource)
+    //.use(cors({origin: /^http(s)?:\/\/(?:localhost|localhost:5173|localhost:4173|studio\.lgs1920.fr)(?::\d+)?\/?$/}))
+    .use(cors({origin: true}))
 
-    .use(cors({origin: /^https?:\/\/(?:localhost|localhost:5173|localhost:4173|studio\.lgs1920.fr)(?::\d+)?\/?$/}))
     .listen(configuration.server.port)
 
 console.log(
