@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="277fcda6-8a1d-4e90-a6a9-1784c0bf9d65" name="backend">
+        <fileTransfer rootFolder="/home/www/lgs1920/backend" accessType="SFTP" host="p5077.webmo.fr" port="22" sshConfigId="1e31a7d1-224b-4f53-a309-50d7da1f77c8" sshConfig="p5077@p5077.webmo.fr:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
