@@ -1,29 +1,36 @@
 export class Controller {
 
     // Relative path from api to studio and vice versa
-    BACKEND='../backend/'
     // In production we are in dist... so ../.. instead of ..
+    BACKEND= `../${process.env.NODE_ENV === 'production' ? '../' : ''}backend/`
     STUDIO = `../${process.env.NODE_ENV === 'production' ? '../' : ''}studio/`
     ASSETS = 'assets/'
 
     constructor() {
     }
 
-    setStudioWorkingDirectory= () => {
-        return process.env.NODE_ENV==='production'?`${this.STUDIO}dist/`:this.STUDIO
+    setStudioDirectory = () => {
+        return process.env.NODE_ENV==='production'?`${this.STUDIO}dist`:this.STUDIO
+    }
+
+    setBackendDirectory= () => {
+        return process.env.NODE_ENV==='production'?`${this.BACKEND}dist`:this.BACKEND
     }
 
 
-    setPublicFilePath = (name) => {
-        return `${this.setStudioWorkingDirectory()}${process.env.NODE_ENV === 'production' ? '/' : 'public/'}${name}`
+    setStudioFilePath = (name) => {
+        return `${this.setStudioDirectory()}${process.env.NODE_ENV === 'production' ? '/' : 'public/'}${name}`
+    }
+    setBackendFilePath = (name) => {
+        return `${this.setBackendDirectory()}${process.env.NODE_ENV === 'production' ? '/' : '/'}${name}`
     }
 
     setPublicDirectoryPath =(name) => {
-        return this.setPublicFilePath(name)+'/'
+        return this.setStudioFilePath(name)+'/'
     }
 
     setAssetFilePath= (name) => {
-        return this.setPublicFilePath(`${this.ASSETS}${name}`)
+        return this.setStudioFilePath(`${this.ASSETS}${name}`)
     }
 
     setAssetDirectoryPath= (name) => {
