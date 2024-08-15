@@ -16,7 +16,6 @@ export class ChangelogResource {
                          tags:        this.tags,
                          description: 'Get changelog file listing',
                          produces:    ['application/json'],
-                        // consumes:    ['application/json'],
                          responses:   {
                              200: {
                                  description: 'The listing you requested',
@@ -34,10 +33,9 @@ export class ChangelogResource {
                          tags:        this.tags,
                          description: 'Read changelog file',
                          produces:    ['application/json'],
-                         // consumes:    ['application/json'],
                          responses:   {
                              200: {
-                                 description: 'The listing you requested',
+                                 description: 'The file content you requested',
                              },
                              500: {
                                  description: 'Internal error',
