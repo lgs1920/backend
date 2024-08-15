@@ -40,9 +40,8 @@ export class ChangelogController extends Controller {
     }
 
     read = async({ params: { file } })=> {
-        const path = Bun.file(`${this.setAssetDirectoryPath(this.CHANGELOG_DIR)}${file}`);
-        const content = await path.text();
-        return {content:content}
+        const path = Bun.file(`${this.setAssetDirectoryPath(this.CHANGELOG_DIR)}${decodeURIComponent(file)}`);
+        return {content:await path.text()}
     }
 
 
