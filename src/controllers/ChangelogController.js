@@ -1,6 +1,6 @@
 import *   as fspromises from 'node:fs/promises'
-import * as path               from 'node:path'
-import { FileUtils }           from '../utils/FileUtils'
+import * as path      from 'node:path'
+import { FileUtils }  from '../utils/FileUtils'
 import { Controller } from './Controller'
 
 export class ChangelogController extends Controller {
@@ -28,7 +28,10 @@ export class ChangelogController extends Controller {
             fileList = fileList.filter(file => path.extname(file).toLowerCase() === extension)
         }
         // Sort
-        fileList = await FileUtils.sortFilesByTime(directory, fileList)
+        fileList = await FileUtils.sortFilesByVersionNumber({
+                                                       files:  fileList,
+                                                       extension: extension,
+                                                   })
 
         return {
             list: fileList,
