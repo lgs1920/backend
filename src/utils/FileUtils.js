@@ -18,7 +18,7 @@ export class FileUtils {
                 const data = fileName.split(' ', 2)
                 return {
                     version: data[1].split(extension)[0],
-                    file:    data[1],
+                    file:    fileName,
                     time:    DateTime.fromFormat(data[0], 'yyyyMMdd').toMillis(),
                 }
             })
