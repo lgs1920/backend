@@ -1,4 +1,5 @@
-import * as fs from 'node:fs'
+import { compareVersions } from 'compare-versions'
+import { DateTime }        from 'luxon'
 
 export class FileUtils {
     /**
@@ -6,20 +7,25 @@ export class FileUtils {
      *
      * @param {string} directory
      * @param {array} files
+     *
      * @return {Promise:array}
      */
-    static sortFilesByTime = async (directory,files,ascendant=false) => {
-        const sortFunction = ascendant
-        ?(a, b) => a.time - b.time
-        :(a, b) => b.time - a.time
+    static sortFilesByVersionNumber = async ({directory,files,ascendant=false,extension='',separator = '-'}) => {
+        const sortFunction = (a, b) => ascendant ? compareVersions(a.version, b.version) : compareVersions(b.version, a.version)
+
         return files
-            .map(fileName => ({
-                name: fileName,
-                time: fs.statSync(`${directory}/${fileName}`).mtime.getTime(),
-            }))
-            .sort((a,b)=>ascendant)
+            .map(fileName => {
+                const [date,version] = fileName.split(separator, 2)
+                return {
+                    version: version.split(extension)[0],
+                    file:    fileName,
+                    time:    DateTime.fromFormat(date, 'yyyyMMdd').toMillis(),
+                }
+            })
+            .sort(sortFunction)
             .map(file => ({
-                    file:file.name,
+                file:    file.file,
+                version: file.version,
                     time:file.time
             }));
     };

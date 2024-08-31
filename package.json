@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@elysiajs/cors": "^1.1.0",
-    "@elysiajs/swagger": "^1.1.0",
+    "@elysiajs/swagger": "^1.1.1",
+    "compare-versions": "^6.1.1",
     "elysia": "latest"
   },
   "devDependencies": {
