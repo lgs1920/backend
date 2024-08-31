@@ -10,16 +10,16 @@ export class FileUtils {
      *
      * @return {Promise:array}
      */
-    static sortFilesByVersionNumber = async ({directory,files,ascendant=false,extension=''}) => {
+    static sortFilesByVersionNumber = async ({directory,files,ascendant=false,extension='',separator = '-'}) => {
         const sortFunction = (a, b) => ascendant ? compareVersions(a.version, b.version) : compareVersions(b.version, a.version)
 
         return files
             .map(fileName => {
-                const data = fileName.split(' ', 2)
+                const [date,version] = fileName.split(separator, 2)
                 return {
-                    version: data[1].split(extension)[0],
+                    version: version.split(extension)[0],
                     file:    fileName,
-                    time:    DateTime.fromFormat(data[0], 'yyyyMMdd').toMillis(),
+                    time:    DateTime.fromFormat(date, 'yyyyMMdd').toMillis(),
                 }
             })
             .sort(sortFunction)
