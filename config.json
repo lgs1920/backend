@@ -1,6 +1,7 @@
 {
   "server": {
     "port": 3333,
-    "name": "LGS1920 Backend server"
+    "name": "LGS1920 Backend server",
+    "platform": "development"
   }
 }

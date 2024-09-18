@@ -3,13 +3,13 @@
   "version": "1.0.50",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "bun run --watch src/index.js",
-    "build": "NODE_ENV=production bun build --target=bun  src/index.js --splitting --outdir ./dist && cp version.json dist",
-    "start": "NODE_ENV=production bun src/index.js"
+    "dev": "NODE_ENV=development bun run --watch src/index.js",
+    "deploy": "bun deploy.js"
   },
   "dependencies": {
-    "@elysiajs/cors": "^1.1.0",
+    "@elysiajs/cors": "^1.1.1",
     "@elysiajs/swagger": "^1.1.1",
+    "argparse": "^2.0.1",
     "compare-versions": "^6.1.1",
     "elysia": "latest"
   },

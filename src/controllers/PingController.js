@@ -1,3 +1,23 @@
+
+/**********************************************************************************************************************
+ *                                                                                                                    *
+ * This file is part of the LGS1920/backend project.                                                                  *
+ *                                                                                                                    *
+ *                                                                                                                    *
+ * File: PingController.js                                                                                            *
+ * Path: /home/christian/devs/assets/lgs1920/backend/src/controllers/PingController.js                                *
+ *                                                                                                                    *
+ * Author : Christian Denat                                                                                           *
+ * email: christian.denat@orange.fr                                                                                   *
+ *                                                                                                                    *
+ * Created on: 2024-09-18                                                                                             *
+ * Last modified: 2024-09-18                                                                                          *
+ *                                                                                                                    *
+ *                                                                                                                    *
+ * Copyright © 2024 LGS1920                                                                                           *
+ *                                                                                                                    *
+ **********************************************************************************************************************/
+
 import { Controller }  from './Controller'
 
 export class PingController extends Controller{

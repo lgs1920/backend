@@ -1,3 +1,23 @@
+
+/**********************************************************************************************************************
+ *                                                                                                                    *
+ * This file is part of the LGS1920/backend project.                                                                  *
+ *                                                                                                                    *
+ *                                                                                                                    *
+ * File: FileUtils.js                                                                                                 *
+ * Path: /home/christian/devs/assets/lgs1920/backend/src/utils/FileUtils.js                                           *
+ *                                                                                                                    *
+ * Author : Christian Denat                                                                                           *
+ * email: christian.denat@orange.fr                                                                                   *
+ *                                                                                                                    *
+ * Created on: 2024-09-18                                                                                             *
+ * Last modified: 2024-08-31                                                                                          *
+ *                                                                                                                    *
+ *                                                                                                                    *
+ * Copyright © 2024 LGS1920                                                                                           *
+ *                                                                                                                    *
+ **********************************************************************************************************************/
+
 import { compareVersions } from 'compare-versions'
 import { DateTime }        from 'luxon'
 
