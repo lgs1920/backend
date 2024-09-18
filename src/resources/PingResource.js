@@ -1,3 +1,23 @@
+
+/**********************************************************************************************************************
+ *                                                                                                                    *
+ * This file is part of the LGS1920/backend project.                                                                  *
+ *                                                                                                                    *
+ *                                                                                                                    *
+ * File: PingResource.js                                                                                              *
+ * Path: /home/christian/devs/assets/lgs1920/backend/src/resources/PingResource.js                                    *
+ *                                                                                                                    *
+ * Author : Christian Denat                                                                                           *
+ * email: christian.denat@orange.fr                                                                                   *
+ *                                                                                                                    *
+ * Created on: 2024-09-18                                                                                             *
+ * Last modified: 2024-08-14                                                                                          *
+ *                                                                                                                    *
+ *                                                                                                                    *
+ * Copyright © 2024 LGS1920                                                                                           *
+ *                                                                                                                    *
+ **********************************************************************************************************************/
+
 import Elysia             from 'elysia'
 import { PingController } from '../controllers/PingController'
 import { PING_ROUTE }     from '../index'
