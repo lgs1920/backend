@@ -18,8 +18,8 @@
  *                                                                                                                    *
  **********************************************************************************************************************/
 
-import { Controller }  from './Controller'
-import {$} from 'bun'
+import { Controller } from './Controller'
+
 export class VersionsController extends Controller{
 
     /**
@@ -29,8 +29,8 @@ export class VersionsController extends Controller{
      */
     versions = async () => {
         const backend = await Bun.file(this.setBackendFilePath('version.json')).json()
-       const studio =  await Bun.file(this.setStudioFilePath('version.json')).json()
-       return  {...studio,...backend}
+        const studio = await Bun.file(this.setStudioFilePath('version.json')).json()
+        return {...studio, ...backend}
     }
 
 }

@@ -1,4 +1,3 @@
-
 /**********************************************************************************************************************
  *                                                                                                                    *
  * This file is part of the LGS1920/backend project.                                                                  *
@@ -23,17 +22,23 @@ export class Controller {
     // Relative path from api to studio and vice versa
     // In production we are in dist... so ../.. instead of ..
 
-    BACKEND='backend/'
-    STUDIO='studio/'
+    BACKEND = '../backend/'
+    STUDIO = '../studio/'
     ASSETS = 'assets/'
 
     constructor() {
         switch (process.env.NODE_ENV) {
             case 'production':
-                this.BACKEND= `../../backend/`
-                this.STUDIO = `../../studio/`
+                this.BACKEND = `../../backend/prod/`
+                this.STUDIO = `../../studio/prod/`
                 break
             case 'staging':
+                this.BACKEND = `../../backend/staging/`
+                this.STUDIO = `../../studio/staging/`
+                break
+            case 'test':
+                this.BACKEND = `../../backend/test/`
+                this.STUDIO = `../studio/test/`
                 break
             default:
                 // do nothing
@@ -41,18 +46,18 @@ export class Controller {
     }
 
     setStudioDirectory = () => {
-        return process.env.NODE_ENV==='production'?`${this.STUDIO}dist`:this.STUDIO
+        return process.env.NODE_ENV === 'development' ? this.STUDIO : `${this.STUDIO}/current`
     }
 
     setBackendDirectory= () => {
-        return process.env.NODE_ENV==='production'?`${this.BACKEND}dist`:this.BACKEND
+        return process.env.NODE_ENV === 'development' ? this.BACKEND : `${this.BACKEND}/current`
     }
 
     setStudioFilePath = (name) => {
-        return `${this.setStudioDirectory()}${process.env.NODE_ENV === 'production' ? '/' : 'public/'}${name}`
+        return `${this.setStudioDirectory()}${process.env.NODE_ENV === 'development' ? 'public/' : '/'}${name}`
     }
-    setBackendFilePath = (obj) => {
-        return `${this.setBackendDirectory()}${process.env.NODE_ENV === 'production' ? '/' : '/'}${name}`
+    setBackendFilePath = (name) => {
+        return `${this.setBackendDirectory()}${process.env.NODE_ENV === 'development' ? '/' : '/'}${name}`
     }
 
     setPublicDirectoryPath =(name) => {
