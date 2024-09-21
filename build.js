@@ -10,8 +10,8 @@
  * Author : Christian Denat                                                                                           *
  * email: christian.denat@orange.fr                                                                                   *
  *                                                                                                                    *
- * Created on: 2024-09-18                                                                                             *
- * Last modified: 2024-09-18                                                                                          *
+ * Created on: 2024-09-21                                                                                             *
+ * Last modified: 2024-09-21                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2024 LGS1920                                                                                           *
@@ -28,20 +28,17 @@ import { execSync }     from 'child_process'
  * usage: build.js [-h] -v VERSION [-m]
  *
  */
-const parser = new argparse.ArgumentParser({
-                                               description: 'Backend Build script',
-                                           })
-
+const parser = new argparse.ArgumentParser()
 parser.add_argument('-v', '--version', {
     help:    'Version number',
     type:'str',
     required:true
 })
-
 parser.add_argument('-m', '--minify', {
     help:    'Minify the output',
     action: 'store_true',
 })
+
 
 const args = parser.parse_args()
 
@@ -51,12 +48,8 @@ if (!version) {
     process.exit(1)
 }
 
-
 const minify = args.minify?'--minify':''
 const buildDirectory = `./dist/${version}`
 
 // Build the project into /dist/<version>
-execSync(`bun build ${minify} --outdir=${buildDirectory} --target=bun  src/index.js --splitting`, {stdio: 'inherit'})
-
-// Add version.json and rename index to backend
-execSync(`cp version.json ${buildDirectory} && mv ${buildDirectory}/index.js ${buildDirectory}/backend.js`, {stdio: 'inherit'})
+execSync(`bun build ${minify} --outdir=${buildDirectory} --target=bun  src/index.js --splitting`)
