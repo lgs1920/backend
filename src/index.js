@@ -42,7 +42,7 @@ export const platforms = {
 // Read configuration
 
 const yaml = require('yaml')
-export const configuration = yaml.parse(fs.readFileSync('servers.yml', 'utf8'))
+export const configuration = JSON.parse(fs.readFileSync('servers.json', 'utf8'))
 if (!configuration.studio.home) {
     configuration.studio.home = process.env.LGS1920_STUDIO_HOME
 }
