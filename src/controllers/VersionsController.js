@@ -10,8 +10,8 @@
  * Author : Christian Denat                                                                                           *
  * email: christian.denat@orange.fr                                                                                   *
  *                                                                                                                    *
- * Created on: 2024-09-18                                                                                             *
- * Last modified: 2024-09-18                                                                                          *
+ * Created on: 2024-09-21                                                                                             *
+ * Last modified: 2024-09-21                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2024 LGS1920                                                                                           *
@@ -28,8 +28,8 @@ export class VersionsController extends Controller{
      * @return json cotent
      */
     versions = async () => {
-        const backend = await Bun.file(this.setBackendFilePath('version.json')).json()
-        const studio = await Bun.file(this.setStudioFilePath('version.json')).json()
+        const backend = await Bun.file(this.backendFilePath('version.json')).json()
+        const studio = await Bun.file(this.studioFilePath('version.json')).json()
         return {...studio, ...backend}
     }
 
