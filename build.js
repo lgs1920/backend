@@ -41,7 +41,6 @@ parser.add_argument('-m', '--minify', {
 
 
 const args = parser.parse_args()
-
 const version =args.version??null
 if (!version) {
     console.error('build.js : Please specify --version,-v with a version number')
