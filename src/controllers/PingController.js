@@ -10,8 +10,8 @@
  * Author : Christian Denat                                                                                           *
  * email: christian.denat@orange.fr                                                                                   *
  *                                                                                                                    *
- * Created on: 2024-09-18                                                                                             *
- * Last modified: 2024-09-18                                                                                          *
+ * Created on: 2024-09-21                                                                                             *
+ * Last modified: 2024-09-21                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2024 LGS1920                                                                                           *
@@ -19,7 +19,7 @@
  **********************************************************************************************************************/
 
 import { Controller }  from './Controller'
-
+import { configuration } from '../index'
 export class PingController extends Controller{
 
     /**
@@ -28,7 +28,7 @@ export class PingController extends Controller{
      * @return json cotent
      */
     ping = async () => {
-        return  {alive:true}
+        return {alive: true, platform: configuration.platform}
     }
 
 }

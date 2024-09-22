@@ -9,8 +9,8 @@
  * Author : Christian Denat                                                                                           *
  * email: christian.denat@orange.fr                                                                                   *
  *                                                                                                                    *
- * Created on: 2024-09-18                                                                                             *
- * Last modified: 2024-09-18                                                                                          *
+ * Created on: 2024-09-21                                                                                             *
+ * Last modified: 2024-09-21                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2024 LGS1920                                                                                           *
@@ -35,7 +35,7 @@ export class ChangelogController extends Controller {
      * @return {Promise<{last: *, files: *}>}
      */
     list = async (context) => {
-        const directory = this.setAssetDirectoryPath(this.CHANGELOG_DIR)
+        const directory = this.assetDirectoryPath(this.CHANGELOG_DIR)
         let extension = context.query.extension
         if (extension && !extension.startsWith('.')) {
             extension = `.${extension}`;
@@ -59,7 +59,7 @@ export class ChangelogController extends Controller {
     }
 
     read = async({ params: { file } })=> {
-        const path = Bun.file(`${this.setAssetDirectoryPath(this.CHANGELOG_DIR)}${decodeURIComponent(file)}`);
+        const path = Bun.file(`${this.assetDirectoryPath(this.CHANGELOG_DIR)}${decodeURIComponent(file)}`)
         return {content:await path.text()}
     }
 

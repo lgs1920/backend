@@ -1,4 +1,3 @@
-
 /**********************************************************************************************************************
  *                                                                                                                    *
  * This file is part of the LGS1920/backend project.                                                                  *
@@ -10,60 +9,43 @@
  * Author : Christian Denat                                                                                           *
  * email: christian.denat@orange.fr                                                                                   *
  *                                                                                                                    *
- * Created on: 2024-09-18                                                                                             *
- * Last modified: 2024-09-18                                                                                          *
+ * Created on: 2024-09-21                                                                                             *
+ * Last modified: 2024-09-21                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2024 LGS1920                                                                                           *
  *                                                                                                                    *
  **********************************************************************************************************************/
+import path              from 'path'
+import { configuration } from '../index'
 
 export class Controller {
 
     // Relative path from api to studio and vice versa
     // In production we are in dist... so ../.. instead of ..
 
-    BACKEND='backend/'
-    STUDIO='studio/'
-    ASSETS = 'assets/'
+    assets = 'assets/'
 
-    constructor() {
-        switch (process.env.NODE_ENV) {
-            case 'production':
-                this.BACKEND= `../../backend/`
-                this.STUDIO = `../../studio/`
-                break
-            case 'staging':
-                break
-            default:
-                // do nothing
-        }
+    studio = () => {
+        return configuration.studio.home
+    }
+    backend = () => {
+        return configuration.backend.home
     }
 
-    setStudioDirectory = () => {
-        return process.env.NODE_ENV==='production'?`${this.STUDIO}dist`:this.STUDIO
+    studioFilePath = (name) => {
+        return path.join(this.studio(), configuration.platform === 'development' ? 'public' : '', name)
     }
 
-    setBackendDirectory= () => {
-        return process.env.NODE_ENV==='production'?`${this.BACKEND}dist`:this.BACKEND
+    backendFilePath = (name) => {
+        return path.join(this.backend(), name)
     }
 
-    setStudioFilePath = (name) => {
-        return `${this.setStudioDirectory()}${process.env.NODE_ENV === 'production' ? '/' : 'public/'}${name}`
-    }
-    setBackendFilePath = (obj) => {
-        return `${this.setBackendDirectory()}${process.env.NODE_ENV === 'production' ? '/' : '/'}${name}`
+    assetFilePath = (name) => {
+        return this.studioFilePath(path.join(this.assets, name))
     }
 
-    setPublicDirectoryPath =(name) => {
-        return this.setStudioFilePath(name)+'/'
-    }
-
-    setAssetFilePath= (name) => {
-        return this.setStudioFilePath(`${this.ASSETS}${name}`)
-    }
-
-    setAssetDirectoryPath= (name) => {
-        return this.setAssetFilePath(name)+'/'
+    assetDirectoryPath = (name) => {
+        return this.assetFilePath(name) + '/'
     }
 }
