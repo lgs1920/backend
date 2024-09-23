@@ -10,8 +10,8 @@
  * Author : Christian Denat                                                                                           *
  * email: christian.denat@orange.fr                                                                                   *
  *                                                                                                                    *
- * Created on: 2024-09-21                                                                                             *
- * Last modified: 2024-09-21                                                                                          *
+ * Created on: 2024-09-23                                                                                             *
+ * Last modified: 2024-09-23                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2024 LGS1920                                                                                           *
@@ -26,11 +26,13 @@ import fs from 'fs'
 import version               from '../version.json'
 import { ChangelogResource } from './resources/ChangelogResource'
 import { PingResource }     from './resources/PingResource'
+import { ReadFileResource } from './resources/ReadFileResource'
 import { VersionsResource } from './resources/VersionsResource'
 
 export const CHANGELOG_ROUTE = 'changelog'
 export const VERSIONS_ROUTE = 'versions'
 export const PING_ROUTE = 'ping'
+export const READ_FILE_ROUTE = 'read'
 
 export const platforms = {
     DEV:'development',
@@ -55,6 +57,7 @@ const resources = new Map([
                               [CHANGELOG_ROUTE,new ChangelogResource()],
                               [VERSIONS_ROUTE, new VersionsResource()],
                               [PING_ROUTE, new PingResource()],
+                              [READ_FILE_ROUTE, new ReadFileResource()],
                           ])
 
 
@@ -92,6 +95,7 @@ const app = new Elysia()
     .use(resources.get(CHANGELOG_ROUTE).resource)
     .use(resources.get(VERSIONS_ROUTE).resource)
     .use(resources.get(PING_ROUTE).resource)
+    .use(resources.get(READ_FILE_ROUTE).resource)
 
     //.use(cors({origin: /^http(s)?:\/\/(?:localhost|localhost:5173|localhost:4173|studio\.lgs1920.fr)(?::\d+)?\/?$/}))
     .use(cors({origin: true}))
