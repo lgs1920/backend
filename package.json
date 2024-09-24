@@ -12,7 +12,7 @@
     "argparse": "^2.0.1",
     "axios": "^1.7.7",
     "compare-versions": "^6.1.1",
-    "elysia": "^1.1.13",
+    "elysia": "^1.1.16",
     "yaml": "^2.5.1"
   },
   "devDependencies": {
