@@ -41,15 +41,21 @@ export class ReadFileController extends Controller {
             const path = query.path === 'backend' ? this.backend() : this.studio()
             const file = [path, query.file].join('/')
             return new Promise(async (resolve, reject) => {
-                fs.readFile(file, 'utf8', (err, data) => {
-                    if (err) {
-                        reject(`Error : ${err.message}`)
-                        return {success: false}
-                    }
-                    else {
-                        resolve(data)
-                    }
-                })
+                try {
+                    fs.readFile(file, 'utf8', (error, content) => {
+                        if (error) {
+                            reject({success: false})
+                        }
+                        else {
+                            resolve({success: true, content: content})
+                        }
+                    })
+                }
+                catch (error) {
+                    reject(`Error : ${error.message}`)
+                    return {success: false}
+                }
+
             })
         }
     }
