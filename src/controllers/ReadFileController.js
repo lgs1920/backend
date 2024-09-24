@@ -9,8 +9,8 @@
  * Author : Christian Denat                                                                                           *
  * email: christian.denat@orange.fr                                                                                   *
  *                                                                                                                    *
- * Created on: 2024-09-23                                                                                             *
- * Last modified: 2024-09-23                                                                                          *
+ * Created on: 2024-09-24                                                                                             *
+ * Last modified: 2024-09-24                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2024 LGS1920                                                                                           *
@@ -24,6 +24,7 @@ import fs             from 'fs'
 export class ReadFileController extends Controller {
 
     readFile = async ({query}) => {
+
         if (query.file.startsWith('http')) {
             // read a remote file
             try {
@@ -37,14 +38,15 @@ export class ReadFileController extends Controller {
         }
         else {
             // read a local file
+            const path = query.path === 'backend' ? this.backend() : this.studio()
+            const file = [path, query.file].join('/')
             return new Promise(async (resolve, reject) => {
-                fs.readFile(query.file, 'utf8', (err, data) => {
+                fs.readFile(file, 'utf8', (err, data) => {
                     if (err) {
                         reject(`Error : ${err.message}`)
                         return {success: false}
                     }
                     else {
-                        console.log(data)
                         resolve(data)
                     }
                 })
