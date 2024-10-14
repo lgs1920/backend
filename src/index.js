@@ -10,8 +10,8 @@
  * Author : Christian Denat                                                                                           *
  * email: christian.denat@orange.fr                                                                                   *
  *                                                                                                                    *
- * Created on: 2024-09-23                                                                                             *
- * Last modified: 2024-09-23                                                                                          *
+ * Created on: 2024-10-14                                                                                             *
+ * Last modified: 2024-10-14                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2024 LGS1920                                                                                           *
@@ -42,9 +42,9 @@ export const platforms = {
 }
 
 // Read configuration
-
-const yaml = require('yaml')
 export const configuration = JSON.parse(fs.readFileSync('servers.json', 'utf8'))
+export const buildDate = JSON.parse(fs.readFileSync('build.json', 'utf8'))
+
 if (!configuration.studio.home) {
     configuration.studio.home = process.env.LGS1920_STUDIO_HOME
 }

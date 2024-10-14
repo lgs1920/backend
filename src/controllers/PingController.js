@@ -10,16 +10,16 @@
  * Author : Christian Denat                                                                                           *
  * email: christian.denat@orange.fr                                                                                   *
  *                                                                                                                    *
- * Created on: 2024-09-21                                                                                             *
- * Last modified: 2024-09-21                                                                                          *
+ * Created on: 2024-10-14                                                                                             *
+ * Last modified: 2024-10-14                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2024 LGS1920                                                                                           *
  *                                                                                                                    *
  **********************************************************************************************************************/
 
-import { Controller }  from './Controller'
-import { configuration } from '../index'
+import { Controller }               from './Controller'
+import { buildDate, configuration } from '../index'
 export class PingController extends Controller{
 
     /**
@@ -28,7 +28,7 @@ export class PingController extends Controller{
      * @return json cotent
      */
     ping = async () => {
-        return {alive: true, platform: configuration.platform}
+        return {alive: true, platform: configuration.platform, build: buildDate.date}
     }
 
 }
