@@ -20,6 +20,7 @@
 
 import { Controller }               from './Controller'
 import { buildDate, configuration } from '../index'
+import { DateTime } from 'luxon'
 export class PingController extends Controller{
 
     /**
@@ -27,8 +28,11 @@ export class PingController extends Controller{
      *
      * @return json cotent
      */
+
     ping = async () => {
-        return {alive: true, platform: configuration.platform, build: buildDate.date}
+        const timestamp = buildDate.date ?? Date.now()
+        const date = `${DateTime.fromMillis(timestamp).toLocaleString(DateTime.DATETIME_FULL_WITH_SECONDS)}`
+        return {alive: true, platform: configuration.platform, build: date, timestamp: timestamp}
     }
 
 }
