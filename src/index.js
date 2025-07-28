@@ -3,19 +3,16 @@
  *                                                                                                                    *
  * This file is part of the LGS1920/backend project.                                                                  *
  *                                                                                                                    *
- *                                                                                                                    *
  * File: index.js                                                                                                     *
- * Path: /home/christian/devs/assets/lgs1920/backend/src/index.js                                                     *
  *                                                                                                                    *
- * Author : Christian Denat                                                                                           *
- * email: christian.denat@orange.fr                                                                                   *
+ * Author : LGS1920 Team                                                                                              *
+ * email: contact@lgs1920.fr                                                                                          *
  *                                                                                                                    *
- * Created on: 2024-10-14                                                                                             *
- * Last modified: 2024-10-14                                                                                          *
+ * Created on: 2025-07-28                                                                                             *
+ * Last modified: 2025-07-28                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
- * Copyright © 2024 LGS1920                                                                                           *
- *                                                                                                                    *
+ * Copyright © 2025 LGS1920                                                                                           *
  **********************************************************************************************************************/
 
 import cors                 from '@elysiajs/cors'
@@ -28,11 +25,13 @@ import { ChangelogResource } from './resources/ChangelogResource'
 import { PingResource }     from './resources/PingResource'
 import { ReadFileResource } from './resources/ReadFileResource'
 import { VersionsResource } from './resources/VersionsResource'
+import { ConvertVideoResource } from './resources/ConvertVideoResource'
 
 export const CHANGELOG_ROUTE = 'changelog'
 export const VERSIONS_ROUTE = 'versions'
 export const PING_ROUTE = 'ping'
 export const READ_FILE_ROUTE = 'read'
+export const CONVERT_VIDEO_ROUTE = 'convert'
 
 export const platforms = {
     DEV:'development',
@@ -58,6 +57,7 @@ const resources = new Map([
                               [VERSIONS_ROUTE, new VersionsResource()],
                               [PING_ROUTE, new PingResource()],
                               [READ_FILE_ROUTE, new ReadFileResource()],
+                              [CONVERT_VIDEO_ROUTE, new ConvertVideoResource()],
                           ])
 
 
@@ -96,6 +96,7 @@ const app = new Elysia()
     .use(resources.get(VERSIONS_ROUTE).resource)
     .use(resources.get(PING_ROUTE).resource)
     .use(resources.get(READ_FILE_ROUTE).resource)
+    .use(resources.get(CONVERT_VIDEO_ROUTE).resource)
 
     //.use(cors({origin: /^http(s)?:\/\/(?:localhost|localhost:5173|localhost:4173|studio\.lgs1920.fr)(?::\d+)?\/?$/}))
     .use(cors({origin: true}))
