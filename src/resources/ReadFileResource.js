@@ -2,19 +2,16 @@
  *                                                                                                                    *
  * This file is part of the LGS1920/backend project.                                                                  *
  *                                                                                                                    *
- *                                                                                                                    *
  * File: ReadFileResource.js                                                                                          *
- * Path: /home/christian/devs/assets/lgs1920/backend/src/resources/ReadFileResource.js                                *
  *                                                                                                                    *
- * Author : Christian Denat                                                                                           *
- * email: christian.denat@orange.fr                                                                                   *
+ * Author : LGS1920 Team                                                                                              *
+ * email: contact@lgs1920.fr                                                                                          *
  *                                                                                                                    *
- * Created on: 2024-09-23                                                                                             *
- * Last modified: 2024-09-23                                                                                          *
+ * Created on: 2025-07-28                                                                                             *
+ * Last modified: 2025-07-28                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
- * Copyright © 2024 LGS1920                                                                                           *
- *                                                                                                                    *
+ * Copyright © 2025 LGS1920                                                                                           *
  **********************************************************************************************************************/
 
 import Elysia                 from 'elysia'
@@ -25,9 +22,8 @@ export class ReadFileResource {
 
     controller = new ReadFileController()
 
-    constructor() {
-        this.resource = new Elysia({})
-            .get('/read', this.controller.readFile, {
+    constructor(app) {
+        app.get('/read', this.controller.readFile, {
 
                      detail: {
                          query:       {
