@@ -14,27 +14,29 @@
  * Copyright © 2025 LGS1920                                                                                           *
  **********************************************************************************************************************/
 
-import { Elysia, t }              from 'elysia'
+import { t }                   from 'elysia'
 import { ConvertVideoController } from '../controllers/ConvertVideoController'
+import { CONVERT_VIDEO_ROUTE } from '../index'
 
 
 export class ConvertVideoResource {
 
     controller = new ConvertVideoController()
 
-    constructor() {
-        this.resource = new Elysia()
-            .post('/convert', this.controller.convert, {
-                body:  t.Object({
-                                    from:   t.String(),
-                                    to:     t.String(),
-                                    params: t.Optional(t.Array(t.String())),
-                                }),
-                files: t.Object({
-                                    file: t.File(),
-                                }),
-            })
-
-            .get('/convert/progress/:id', this.controller.progress)
+    constructor(app) {
+        app.group(CONVERT_VIDEO_ROUTE, (group) =>
+            group
+                .post('', this.controller.convert, {
+                    body:  t.Object({
+                                        from:   t.String(),
+                                        to:     t.String(),
+                                        params: t.Optional(t.Array(t.String())),
+                                    }),
+                    files: t.Object({
+                                        file: t.File(),
+                                    }),
+                })
+                .get('/progress/:id', this.controller.progress),
+        )
     }
 }
