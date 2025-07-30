@@ -7,8 +7,8 @@
  * Author : LGS1920 Team                                                                                              *
  * email: contact@lgs1920.fr                                                                                          *
  *                                                                                                                    *
- * Created on: 2025-07-28                                                                                             *
- * Last modified: 2025-07-28                                                                                          *
+ * Created on: 2025-07-30                                                                                             *
+ * Last modified: 2025-07-30                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2025 LGS1920                                                                                           *
@@ -18,7 +18,6 @@ import cors       from '@elysiajs/cors'
 import swagger    from '@elysiajs/swagger'
 import { Elysia } from 'elysia'
 import fs         from 'fs'
-
 import version                  from '../version.json'
 import { ChangelogResource }    from './resources/ChangelogResource'
 import { ConvertVideoResource } from './resources/ConvertVideoResource'
@@ -54,59 +53,22 @@ export const buildDate = JSON.parse(fs.readFileSync('build.json', 'utf8'))
 configuration.studio.home = configuration.studio.home || process.env.LGS1920_STUDIO_HOME
 configuration.backend.home = configuration.backend.home || process.env.LGS1920_BACKEND_HOME
 
+
+const yellow = '\x1b[33m'
+const green = '\x1b[32m'
+const reset = '\x1b[0m'
+
 /** Main application instance */
+
 const app = new Elysia()
+    .use(
+        cors({
+                 preflight: true,
+                 origin:    /^https?:\/\/([a-zA-Z0-9-]+\.)*lgs1920\.fr(?::\d+)?$/,
+             }),
+    )
 
-// Common CORS headers
-const corsHeaders = {
-    'Access-Control-Allow-Methods':     'GET,POST,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers':     'Content-Type,Authorization',
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Max-Age':           '3600',
-}
-
-/**
- * Middleware to handle CORS and validate origins
- * @param {Object} param - Request context
- * @param {Request} param.request - The incoming request object
- * @param {Object} param.set - Response headers setter
- * @returns {Response|undefined} Response for invalid origins or OPTIONS requests, undefined otherwise
- */
-app.onBeforeHandle(({request, set}) => {
-    const origin = request.headers.get('Origin')
-    const url = new URL(request.url)
-
-    // Handle Swagger requests
-    if (url.pathname.startsWith('/swagger')) {
-        set.headers['Access-Control-Allow-Origin'] = origin || '*'
-        Object.assign(set.headers, corsHeaders)
-        if (request.method === 'OPTIONS') {
-            return new Response(null, {status: 204, headers: set.headers})
-        }
-        return
-    }
-
-    // Allow same-origin requests (null origin) if host matches backend
-    const backendHost = `${configuration.backend.domain}:${configuration.backend.port}`
-    const requestHost = url.host
-    const isSameOrigin = !origin && requestHost === backendHost
-
-    // Validate origin for non-Swagger requests
-    const allowedOriginPattern = /^https?:\/\/([a-zA-Z0-9-]+\.)*lgs1920\.fr(?::\d+)?$/
-    if (!isSameOrigin && (!origin || !allowedOriginPattern.test(origin))) {
-        console.warn(`[CORS] Origin rejected: ${origin}`)
-        return new Response('Forbidden origin', {status: 403})
-    }
-
-    // Set CORS headers for allowed origins
-    set.headers['Access-Control-Allow-Origin'] = origin || `${url.protocol}//${url.host}`
-    Object.assign(set.headers, corsHeaders)
-    if (request.method === 'OPTIONS') {
-        return new Response(null, {status: 204, headers: set.headers})
-    }
-})
-
-/** Configure Swagger UI for API documentation */
+// /** Configure Swagger UI for API documentation */
 app.use(swagger({
                     documentation: {
                         info:    {
@@ -146,4 +108,4 @@ new ConvertVideoResource(app)
 app.listen(configuration.backend.port)
 
 // Log server startup information
-console.log(`${configuration.backend.name} is running at ${app.server?.hostname}:${app.server?.port}`)
+console.log(`${green}${configuration.backend.name}${reset} is running at ${yellow}${configuration.backend.domain}:${app.server?.port}${reset}.`)
