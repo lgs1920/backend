@@ -7,118 +7,372 @@
  * Author : LGS1920 Team                                                                                              *
  * email: contact@lgs1920.fr                                                                                          *
  *                                                                                                                    *
- * Created on: 2025-07-28                                                                                             *
- * Last modified: 2025-07-28                                                                                          *
+ * Created on: 2025-08-01                                                                                             *
+ * Last modified: 2025-08-01                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2025 LGS1920                                                                                           *
  **********************************************************************************************************************/
 
-import { spawn }         from 'bun'
-import { nanoid }        from 'nanoid'
-import *   as fspromises from 'node:fs/promises'
-import * as path         from 'node:path'
-import { FileUtils }     from '../utils/FileUtils'
-import { Controller }    from './Controller'
+import { nanoid }            from 'nanoid'
+import * as path             from 'node:path'
+import { tmpdir }            from 'node:os'
+import { activeConversions } from './conversions'
 
-export class ConvertVideoController extends Controller {
+export class ConvertVideoController {
+    FFMPEG_PATH = 'ffmpeg'
 
-    //const FFMPEG_PATH = spawn(`pwd`)
+    /**
+     * Starts SSE stream for progress updates
+     * @param {Object} args - Route arguments containing params, set
+     * @returns {AsyncGenerator} SSE stream for progress updates
+     */
+    async* startProgressStream({params = {}, set = {}}) {
+        const {id} = params
 
-    getProcessDuration = async (filePath) => {
-        const { stdout } = await $`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ${filePath}`
-        return Math.floor(Number(stdout.trim()))
+        set.headers['Content-Type'] = 'text/event-stream'
+        set.headers['Cache-Control'] = 'no-cache'
+        set.headers['Connection'] = 'keep-alive'
+        set.headers['Access-Control-Expose-Headers'] = 'X-Conversion-Id'
+
+        if (!id || !activeConversions.has(id)) {
+            console.error(`[progress][${id || 'unknown'}] Invalid ID or conversion not found`)
+            set.status = 404
+            yield `data: ${JSON.stringify({error: 'Conversion ID not found'})}\n\n`
+            return
+        }
+
+        const conversion = activeConversions.get(id)
+        const duration = conversion.duration
+
+        console.log(`[progress][${id}] Starting SSE stream, duration: ${duration ? duration.toFixed(2) : 'N/A'} seconds`)
+        yield `data: ${JSON.stringify({started: true, conversionId: id, percentage: 0, timeSec: 0})}\n\n`
+
+        let lastPercentage = -1
+        const checkInterval = 200 // Reduced interval for more frequent updates
+        const heartbeatInterval = 5000
+        let lastHeartbeat = Date.now()
+
+        while (activeConversions.has(id)) {
+            try {
+                const percentage = conversion.percentage || 0
+                const timeSec = conversion.timeSec || 0
+                if (percentage !== lastPercentage) { // Update on any change
+                    console.log(`[progress][${id}] Progress: ${percentage.toFixed(2)}%`)
+                    yield `data: ${JSON.stringify({
+                                                      percentage: Number(percentage.toFixed(2)),
+                                                      timeSec:    Number(timeSec.toFixed(2)),
+                                                  })}\n\n`
+                    lastPercentage = percentage
+                }
+
+                if (conversion.done) {
+                    console.log(`[progress][${id}] Conversion done`)
+                    yield `data: ${JSON.stringify({
+                                                      done:       true,
+                                                      percentage: 100,
+                                                      timeSec:    Number(duration ? duration.toFixed(2) : 0),
+                                                  })}\n\n`
+                    conversion.streamActive = false
+                    break
+                }
+
+                await Bun.sleep(checkInterval)
+
+                if (Date.now() - lastHeartbeat >= heartbeatInterval) {
+                    console.log(`[progress][${id}] Sent heartbeat`)
+                    yield ': heartbeat\n\n'
+                    lastHeartbeat = Date.now()
+                }
+            }
+            catch (error) {
+                console.error(`[progress][${id}] Error in progress stream: ${error.message}`)
+                yield `data: ${JSON.stringify({error: error.message})}\n\n`
+                conversion.streamActive = false
+                break
+            }
+        }
+
+        if (activeConversions.has(id)) {
+            activeConversions.get(id).streamActive = false
+            console.log(`[progress][${id}] Stream marked as inactive`)
+        }
     }
 
-    convert=async ({set, files, body}) => {
-//console.log($`pwd`)
-        const file = files.file
-        const originalName = uploadedFile.name
-        const baseName = path.basename(originalName, path.extname(originalName))
+    /**
+     * Performs video conversion
+     * @param {Object} request - Request object
+     * @param {Object} set - Response configuration object
+     * @returns {Promise<Response>} Response with converted video
+     */
+    async convertVideo({request, set}) {
+        let id = nanoid()
+        let input
+        let output
+        console.log(`[convert][${id}] Starting conversion`)
 
+        try {
+            set.headers['Access-Control-Expose-Headers'] = 'X-Conversion-Id'
 
-        const {from, to, params} = body
+            const formData = await request.formData()
+            const body = JSON.parse(formData.get('body') || '{}')
+            const file = formData.get('file')
+            console.log(`[convert][${id}] Request body:`, body)
+            const duration = body.duration ? Number(body.duration) / 1000 : null
 
-        const id = nanoid()
-        const input = join(tmpdir(), `input-${id}.${from}`)
-        const output = join(tmpdir(), `output-${id}.${to}`)
-        const progressFile = join(tmpdir(), `progress-${id}.txt`)
+            if (!file || !body || !duration) {
+                console.error(`[convert][${id}] Invalid request data: file=${!!file}, duration=${duration}`)
+                set.status = 400
+                return new Response('Invalid request data')
+            }
 
-        // Écriture du fichier uploadé en local
-        await Bun.write(input, await file.arrayBuffer())
+            const {from, to, params} = body
+            const originalName = file.name || 'input'
+            const baseName = path.basename(originalName, path.extname(originalName))
+            input = path.join(tmpdir(), `input-${id}.${from.toLowerCase()}`)
+            output = path.join(tmpdir(), `output-${id}.${to.toLowerCase()}`)
 
-        // Conversion avec FFmpeg + suivi de progress dans fichier texte
-        const ffmpegArgs = ['-i', input, ...(params || []), '-progress', progressFile, '-y', output]
-        const ffmpeg = spawn('ffmpeg', ffmpegArgs)
+            // Initialize conversion tracking
+            activeConversions.set(id, {
+                output,
+                streamActive: true,
+                duration,
+                inputFile:  input,
+                percentage: 0,
+                timeSec:    0,
+                done:       false,
+            })
+            console.log(`[convert][${id}] Added to activeConversions: ${activeConversions.size}`)
 
-        //SSE headers
-        set.headers['Content-Type'] = 'text/event-stream'
-        set.headers['Connection'] = 'keep-alive'
-        set.headers['Cache-Control'] = 'no-cache'
+            // Save file temporarily
+            await Bun.write(input, await file.arrayBuffer())
+            console.log(`[convert][${id}] Saved input file: ${input}`)
 
-        const interval = setInterval(() => {
-            try {
-                const txt = Bun.file(progressFile).text()
-                const match = txt.match(/out_time_ms=(\d+)/)
-                if (match) {
-                    const sec = Math.floor(Number(match[1]) / 1e6)
-                    set.write(`data: {"progress":${sec}}\n\n`)
+            // Ensure file is fully written
+            let fileExists = false
+            let lastSize = 0
+            let stableCount = 0
+            const maxWaitTime = 5000
+            const checkInterval = 100
+            for (let elapsed = 0; elapsed < maxWaitTime; elapsed += checkInterval) {
+                if (await Bun.file(input).exists()) {
+                    const currentSize = await Bun.file(input).size
+                    if (currentSize === lastSize && currentSize > 0) {
+                        stableCount++
+                        if (stableCount >= 3) {
+                            fileExists = true
+                            console.log(`[convert][${id}] Input file stable at ${currentSize} bytes`)
+                            break
+                        }
+                    }
+                    else {
+                        stableCount = 0
+                    }
+                    lastSize = currentSize
                 }
+                await Bun.sleep(checkInterval)
             }
-            catch (_) {
+
+            if (!fileExists) {
+                console.error(`[convert][${id}] Input file not ready after ${maxWaitTime}ms`)
+                throw new Error('Input file not ready')
             }
-        }, 500)
 
-        ffmpeg.on('close', () => {
-            clearInterval(interval)
-            set.write(`data: {"done":true}\n\n`)
-            set.write('event: end\n\n')
+            const hasAudio = await this.checkAudioTrack(input)
+            const filteredParams = params.filter(arg =>
+                                                     arg !== '-i' &&
+                                                     !arg.includes('input.') &&
+                                                     !arg.includes('output.') &&
+                                                     (!arg.includes('-b:a') || hasAudio) &&
+                                                     (!arg.includes('-c:a') || hasAudio)
+            )
 
-            // 📤 Envoi final du fichier converti
-            set.headers['Content-Disposition'] = `attachment; filename="${basename}.${format_out}"`
+            const ffmpegArgs = ['-i', input, ...filteredParams, '-progress', 'pipe:1', '-y', output]
+            console.log(`[convert][${id}] FFmpeg command: ${this.FFMPEG_PATH} ${ffmpegArgs.join(' ')}`)
+
+            const ffmpeg = Bun.spawn([this.FFMPEG_PATH, ...ffmpegArgs], {stdio: ['ignore', 'pipe', 'pipe']})
+            activeConversions.get(id).ffmpegProcess = ffmpeg // Store the process
+            let ffmpegError = ''
+
+            // Read progress from stdout
+            const stdoutReader = ffmpeg.stdout.getReader()
+            const stdoutPromise = (async () => {
+                const decoder = new TextDecoder()
+                let buffer = ''
+                while (true) {
+                    const {done, value} = await stdoutReader.read()
+                    if (done) {
+                        break
+                    }
+                    const chunk = decoder.decode(value, {stream: true})
+                    buffer += chunk
+
+                    const lines = buffer.split('\n')
+                    buffer = lines.pop() // Keep incomplete line in buffer
+
+                    for (const line of lines) {
+                        console.log(`[convert][${id}] FFmpeg stdout: ${line}`)
+
+                        if (line.startsWith('out_time_ms=')) {
+                            const timeSec = Number(line.split('=')[1]) / 1000000
+                            const percentage = duration ? Math.min(100, (timeSec / duration) * 100) : 0
+                            if (activeConversions.has(id)) {
+                                activeConversions.get(id).percentage = percentage
+                                activeConversions.get(id).timeSec = timeSec
+                            }
+                        }
+                        else if (line === 'progress=end') {
+                            console.log(`[convert][${id}] FFmpeg progress end`)
+                            if (activeConversions.has(id)) {
+                                activeConversions.get(id).percentage = 100
+                                activeConversions.get(id).timeSec = duration || 0
+                                activeConversions.get(id).done = true
+                            }
+                        }
+                    }
+                }
+            })()
+
+            // Capture errors from stderr
+            const stderrReader = ffmpeg.stderr.getReader()
+            const stderrPromise = (async () => {
+                while (true) {
+                    const {done, value} = await stderrReader.read()
+                    if (done) {
+                        break
+                    }
+                    const chunk = new TextDecoder().decode(value)
+                    ffmpegError += chunk
+                    console.log(`[convert][${id}] FFmpeg stderr: ${chunk}`)
+                }
+            })()
+
+            const code = await ffmpeg.exited
+            await stdoutPromise
+            await stderrPromise
+
+            console.log(`[convert][${id}] FFmpeg process exited with code: ${code}`)
+
+            if (code !== 0) {
+                console.error(`[convert][${id}] FFmpeg failed with code ${code}: ${ffmpegError}`)
+                set.status = 500
+                throw new Error(`FFmpeg failed with code ${code}: ${ffmpegError || 'Unknown error'}`)
+            }
+
+            // Verify output file exists and has content
+            if (!await Bun.file(output).exists()) {
+                console.error(`[convert][${id}] Output file does not exist: ${output}`)
+                set.status = 500
+                throw new Error('Output file was not created')
+            }
+
+            const outputSize = await Bun.file(output).size
+            if (outputSize === 0) {
+                console.error(`[convert][${id}] Output file is empty: ${output}`)
+                set.status = 500
+                throw new Error('Output file is empty')
+            }
+
+            console.log(`[convert][${id}] Output file created successfully: ${output} (${outputSize} bytes)`)
+
             set.headers['Content-Type'] = 'application/octet-stream'
+            set.headers['Content-Disposition'] = `attachment; filename="${baseName}.${to.toLowerCase()}"`
+            set.headers['X-Conversion-Id'] = id
 
-            const stream = createReadStream(output)
-            stream.on('close', () => {
-                try {
-                    unlinkSync(input)
-                    unlinkSync(output)
-                    unlinkSync(progressFile)
-                }
-                catch (_) {
+            // Delay cleanup to allow SSE to complete
+            setTimeout(() => this.cleanupProgress(id, input, output), 10000)
+
+            return await this.streamDownload(id, output)
+        }
+        catch (error) {
+            console.error(`[convert][${id || 'unknown'}] Error: ${error.message}`)
+            if (input && await Bun.file(input).exists()) {
+                await Bun.file(input).delete()
+            }
+            if (output && await Bun.file(output).exists()) {
+                await Bun.file(output).delete()
+            }
+            if (activeConversions.has(id)) {
+                setTimeout(() => this.cleanupProgress(id, activeConversions.get(id).inputFile, activeConversions.get(id).output), 5000)
+            }
+            set.status = 500
+            return new Response(`Error: ${error.message}`)
+        }
+    }
+
+    /**
+     * Streams the converted video
+     * @param {string} id - Conversion ID
+     * @param {string} output - Output file path
+     * @returns {Response} Streamed response
+     */
+    async streamDownload(id, output) {
+        try {
+            const outputFile = Bun.file(output)
+            if (!await outputFile.exists()) {
+                console.error(`[download][${id}] Output file not found: ${output}`)
+                return new Response('Output file not found', {status: 500})
+            }
+
+            console.log(`[download][${id}] Starting stream download for: ${output}`)
+            const stream = outputFile.stream()
+            return new Response(stream, {
+                headers: {
+                    'Content-Type': 'application/octet-stream',
                 }
             })
-
-            return stream
-        })
+        }
+        catch (error) {
+            console.error(`[download][${id}] Error: ${error.message}`)
+            return new Response(`Error: ${error.message}`, {status: 500})
+        }
     }
 
-    progress=({ params, set }) => {
-        const progressFile = join(tmpdir(), `progress-${params.id}.txt`)
-
-        // Headers SSE
-        set.headers['Content-Type'] = 'text/event-stream'
-        set.headers['Cache-Control'] = 'no-cache'
-        set.headers['Connection'] = 'keep-alive'
-
-        const interval = setInterval(() => {
-            try {
-                const content = Bun.file(progressFile).text()
-                const match = content.match(/out_time_ms=(\d+)/)
-
-                if (match) {
-                    const timeSec = Math.floor(Number(match[1]) / 1e6)
-                    set.write(`data: {"progress": ${timeSec}}\n\n`)
+    /**
+     * Cleans up files and conversion tracking
+     * @param {string} id - Conversion ID
+     * @param {string} inputFile - Input file path
+     * @param {string} outputFile - Output file path
+     */
+    async cleanupProgress(id, inputFile, outputFile) {
+        try {
+            console.log(`[cleanup][${id}] Starting cleanup process`)
+            if (activeConversions.has(id)) {
+                const conversion = activeConversions.get(id)
+                if (conversion.ffmpegProcess && !conversion.ffmpegProcess.killed) {
+                    conversion.ffmpegProcess.kill()
+                    console.log(`[cleanup][${id}] Killed FFmpeg process`)
                 }
-            } catch (_) {}
-        }, 500)
-
-        // Fermer proprement quand le client coupe
-        set.socket.on('close', () => {
-            clearInterval(interval)
-        })
-
-
+                if (inputFile && await Bun.file(inputFile).exists()) {
+                    await Bun.file(inputFile).delete()
+                    console.log(`[cleanup][${id}] Deleted input file: ${inputFile}`)
+                }
+                if (outputFile && await Bun.file(outputFile).exists()) {
+                    await Bun.file(outputFile).delete()
+                    console.log(`[cleanup][${id}] Deleted output file: ${outputFile}`)
+                }
+                activeConversions.delete(id)
+                console.log(`[cleanup][${id}] Removed from activeConversions: ${activeConversions.size}`)
+            }
+        }
+        catch (error) {
+            console.error(`[cleanup][${id}] Error: ${error.message}`)
+        }
     }
 
+    /**
+     * Checks for audio track in the input file
+     * @param {string} input - Input file path
+     * @returns {Promise<boolean>} True if audio track exists
+     */
+    async checkAudioTrack(input) {
+        try {
+            const ffprobe = Bun.spawn(['ffprobe', '-v', 'error', '-show_streams', '-select_streams', 'a', input])
+            return (await ffprobe.exited) === 0
+        }
+        catch (error) {
+            console.error(`[ffprobe] Error checking audio track: ${error.message}`)
+            return false
+        }
+    }
 }
