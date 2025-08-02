@@ -7,8 +7,8 @@
  * Author : LGS1920 Team                                                                                              *
  * email: contact@lgs1920.fr                                                                                          *
  *                                                                                                                    *
- * Created on: 2025-08-01                                                                                             *
- * Last modified: 2025-08-01                                                                                          *
+ * Created on: 2025-08-02                                                                                             *
+ * Last modified: 2025-08-02                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2025 LGS1920                                                                                           *
@@ -66,8 +66,8 @@ const app = new Elysia() //
                  preflight: true,
                  origin:    /^https?:\/\/([a-zA-Z0-9-]+\.)*lgs1920\.fr(?::\d+)?$/,
                  methods:        ['GET', 'POST'],
-                 allowedHeaders: ['Content-Type', 'X-Conversion-Id'],
-                 exposedHeaders: ['X-Conversion-Id', 'X-Video-Duration'],
+                 allowedHeaders: ['Content-Type', 'X-Conversion-Id', 'X-Request-Progress', 'X-Progress-Interval'],
+                 exposedHeaders: ['X-Conversion-Id'],
                  credentials:    true,
              }),
     )
