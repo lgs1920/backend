@@ -7,8 +7,8 @@
  * Author : LGS1920 Team                                                                                              *
  * email: contact@lgs1920.fr                                                                                          *
  *                                                                                                                    *
- * Created on: 2025-08-02                                                                                             *
- * Last modified: 2025-08-02                                                                                          *
+ * Created on: 2025-08-05                                                                                             *
+ * Last modified: 2025-08-05                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2025 LGS1920                                                                                           *
@@ -34,7 +34,12 @@ export const PING_ROUTE = 'ping'
 /** Route for reading files */
 export const READ_FILE_ROUTE = 'read'
 /** Route for converting videos */
-export const CONVERT_VIDEO_ROUTE = 'convert'
+export const CONVERT_VIDEO_ROUTE = {
+    convert:  'convert',
+    progress: '/progress',
+    download: '/download',
+    cancel:   '/cancel',
+}
 
 /** Available platform environments */
 export const platforms = {
@@ -65,7 +70,7 @@ const app = new Elysia() //
         cors({
                  preflight: true,
                  origin:    /^https?:\/\/([a-zA-Z0-9-]+\.)*lgs1920\.fr(?::\d+)?$/,
-                 methods:        ['GET', 'POST'],
+                 methods: ['GET', 'POST', 'DELETE'],
                  allowedHeaders: ['Content-Type', 'X-Conversion-Id', 'X-Request-Progress', 'X-Progress-Interval'],
                  exposedHeaders: ['X-Conversion-Id'],
                  credentials:    true,
