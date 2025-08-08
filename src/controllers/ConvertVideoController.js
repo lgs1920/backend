@@ -7,17 +7,18 @@
  * Author : LGS1920 Team                                                                                              *
  * email: contact@lgs1920.fr                                                                                          *
  *                                                                                                                    *
- * Created on: 2025-08-07                                                                                             *
- * Last modified: 2025-08-07                                                                                          *
+ * Created on: 2025-08-08                                                                                             *
+ * Last modified: 2025-08-08                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2025 LGS1920                                                                                           *
  **********************************************************************************************************************/
 
-import { nanoid } from 'nanoid'
-import * as path           from 'node:path'
-import { tmpdir } from 'node:os'
-import { readdir, unlink } from 'node:fs/promises'
+import { spawn }             from 'bun'
+import { nanoid }            from 'nanoid'
+import * as path             from 'node:path'
+import { tmpdir }            from 'node:os'
+import { readdir, unlink }   from 'node:fs/promises'
 import { activeConversions } from './conversions'
 import { configuration, CONVERT_VIDEO_ROUTE } from '../index'
 
@@ -140,20 +141,20 @@ export class ConvertVideoController {
             const duration = body.duration ? Number(body.duration) / 1000 : null
             activeConversions.set(id, {
                 streamActive: false,
-                duration:     duration || 1, // Will be updated later
+                duration:    duration || 1, // Will be updated later
                 percentage: 0,
-                timeSec:      0,
-                done:         false,
-                error:        null,
-                outputReady:  false,
+                timeSec:     0,
+                done:        false,
+                error:       null,
+                outputReady: false,
                 originalName: file.name || 'converted',
                 outputFormat: body.to,
                 downloadStarted: false,
-                cancelled:    false,
-                inputFile:    null, // Will be set in #setupFiles
-                output:       null, // Will be set in #setupFiles
+                cancelled:   false,
+                inputFile:   null, // Will be set in #setupFiles
+                output:      null, // Will be set in #setupFiles
                 isDownloaded: file.isDownloaded || false, // Track if file was read from path
-                timestamp:    Date.now(), // For cleanup timing
+                timestamp:   Date.now(), // For cleanup timing
             })
 
             // Start conversion in background (fire and forget)
@@ -187,9 +188,9 @@ export class ConvertVideoController {
                                                        cancel: `/${CONVERT_VIDEO_ROUTE.convert}${CONVERT_VIDEO_ROUTE.cancel}/${id}`,
                                                    },
                                                    metadata: {
-                                                       timestamp:        new Date().toISOString(),
+                                                       timestamp:    new Date().toISOString(),
                                                        originalFilename: file.name,
-                                                       targetFormat:     body.to,
+                                                       targetFormat: body.to,
                                                        estimatedDuration: duration ? `${duration}s` : 'unknown',
                                                    },
                                                }) + '\n\n', {
@@ -203,7 +204,7 @@ export class ConvertVideoController {
                                                    success: false,
                                                    error: error.message,
                                                }) + '\n\n', {
-                                    headers: {'Content-Type': 'application/json'},
+                headers: {'Content-Type': 'application/json'},
                                 })
         }
     }
@@ -244,7 +245,7 @@ export class ConvertVideoController {
                                                    message: 'Conversion in progress',
                                                    percentage: conversion.percentage,
                                                }) + '\n\n', {
-                                    headers: {'Content-Type': 'application/json'},
+                headers: {'Content-Type': 'application/json'},
                                 })
         }
 
@@ -289,7 +290,7 @@ export class ConvertVideoController {
                                                    success: false,
                                                    error: 'Conversion not found',
                                                }) + '\n\n', {
-                                    headers: {'Content-Type': 'application/json'},
+                headers: {'Content-Type': 'application/json'},
                                 })
         }
 
@@ -323,7 +324,7 @@ export class ConvertVideoController {
                     const {controller, encoder} = conversion.sseStream
                     const cancelData = {
                         cancelled: true,
-                        message:   'Conversion cancelled by user',
+                        message: 'Conversion cancelled by user',
                         percentage: conversion.percentage,
                     }
                     controller.enqueue(encoder.encode(`event: cancelled\ndata: ${JSON.stringify(cancelData)}\n\n`))
@@ -347,8 +348,8 @@ export class ConvertVideoController {
 
             set.headers['Content-Type'] = 'application/json'
             return new Response(JSON.stringify({
-                                                   success:      true,
-                                                   message:      'Conversion cancelled successfully',
+                                                   success: true,
+                                                   message: 'Conversion cancelled successfully',
                                                    conversionId: id,
                                                    finalPercentage: conversion.percentage,
                                                }) + '\n\n', {
@@ -367,7 +368,7 @@ export class ConvertVideoController {
                                                    success: false,
                                                    error: `Cancellation failed: ${error.message}`,
                                                }) + '\n\n', {
-                                    headers: {'Content-Type': 'application/json'},
+                headers: {'Content-Type': 'application/json'},
                                 })
         }
     }
@@ -493,17 +494,17 @@ export class ConvertVideoController {
                                                       if (conversion?.sseStream?.cleanup) {
                                                           conversion.sseStream.cleanup()
                                                       }
-                                                  },
+                                                  }
                                               })
 
             return new Response(stream, {
                 headers: {
-                    'Content-Type':                  'text/event-stream',
-                    'Cache-Control':                 'no-cache',
-                    'Connection':                    'keep-alive',
+                    'Content-Type':      'text/event-stream',
+                    'Cache-Control':     'no-cache',
+                    'Connection':        'keep-alive',
                     'Access-Control-Expose-Headers': 'X-Conversion-Id',
-                    'X-Accel-Buffering':             'no',
-                },
+                    'X-Accel-Buffering': 'no',
+                }
             })
         }
         else {
@@ -511,14 +512,14 @@ export class ConvertVideoController {
             if (conversion.done && conversion.percentage >= 100) {
                 this.#logInfo(`[progress][${conversionId}] Conversion complete in polling mode, expecting download`, isDebug)
                 const completeData = {
-                    done:       true,
+                    done:    true,
                     percentage: 100,
-                    timeSec:    Number(conversion.duration ? conversion.duration.toFixed(2) : conversion.timeSec.toFixed(2)),
+                    timeSec: Number(conversion.duration ? conversion.duration.toFixed(2) : conversion.timeSec.toFixed(2)),
                 }
                 const jsonResponse = JSON.stringify({
                                                         success: true,
-                                                        event:   'complete',
-                                                        data:    completeData,
+                                                        event: 'complete',
+                                                        data:  completeData,
                                                     }) + '\n\n'
 
                 return new Response(jsonResponse, {
@@ -531,8 +532,8 @@ export class ConvertVideoController {
                 this.#logError(`[progress][${conversionId}] Conversion error: ${conversion.error}`)
                 const jsonResponse = JSON.stringify({
                                                         success: false,
-                                                        event:   'error',
-                                                        data:    {error: conversion.error},
+                                                        event: 'error',
+                                                        data:  {error: conversion.error},
                                                     }) + '\n\n'
 
                 return new Response(jsonResponse, {
@@ -544,12 +545,12 @@ export class ConvertVideoController {
             // Progress case
             const progressData = {
                 percentage: Number(conversion.percentage.toFixed(2)) || 0,
-                timeSec:    Number(conversion.timeSec.toFixed(2)) || 0,
+                timeSec: Number(conversion.timeSec.toFixed(2)) || 0,
             }
             const jsonResponse = JSON.stringify({
                                                     success: true,
-                                                    event:   'progress',
-                                                    data:    progressData,
+                                                    event: 'progress',
+                                                    data:  progressData,
                                                 }) + '\n\n'
 
             return new Response(jsonResponse, {
@@ -789,10 +790,10 @@ export class ConvertVideoController {
     #sendStartEvent = (controller, encoder, id, isDebug) => {
         this.#logIfVerbose(`[progress][${id}] Sending start event`, isDebug)
         const startData = {
-            started:    true,
+            started: true,
             conversionId: id,
             percentage: 0,
-            timeSec:    0,
+            timeSec: 0,
         }
         controller.enqueue(encoder.encode(`event: start\ndata: ${JSON.stringify(startData)}\n\n`))
     }
@@ -935,6 +936,16 @@ export class ConvertVideoController {
             this.#logError(`[convert][${id}] Invalid request: file=${!!file}, body=${!!body}`)
             throw new Error('Invalid request data')
         }
+
+        // Validate metadata if present
+        if (body.metadata && typeof body.metadata === 'object') {
+            for (const [key, value] of Object.entries(body.metadata)) {
+                if (typeof key !== 'string' || typeof value !== 'string' || !key.trim() || !value.trim()) {
+                    this.#logError(`[convert][${id}] Invalid metadata: key=${key}, value=${value}`)
+                    throw new Error(`Invalid metadata: key=${key}, value=${value}`)
+                }
+            }
+        }
     }
 
     /**
@@ -1030,7 +1041,7 @@ export class ConvertVideoController {
      * @param {number|null} duration - Total duration in seconds
      * @param {boolean} isDebug - Debug logging flag
      */
-    parseFffmpegProgress = (id, line, duration, isDebug) => {
+    #parseFfmpegProgress = (id, line, duration, isDebug) => {
         if (!activeConversions.has(id)) {
             return
         }
@@ -1074,38 +1085,68 @@ export class ConvertVideoController {
      * @param {boolean} isDebug - Debug logging flag
      */
     #executeConversion = async (id, input, output, body, duration, isDebug) => {
-        const {to, bitrate, resolution, fps} = body
+        const {to, bitrate, resolution, fps, from, metadata} = body
 
         // Build FFmpeg command
         const args = ['-i', input, '-y'] // -y to overwrite output
 
-        // Add codec and quality settings based on target format
-        if (to === 'mp4') {
-            args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', '23')
+        // Handle same input/output format with stream copying
+        if (from.toLowerCase() === to.toLowerCase()) {
+            args.push('-c', 'copy')
+            this.#logIfVerbose(`[convert][${id}] Same input/output format (${from}), copying streams without re-encoding`, isDebug)
         }
-        else if (to === 'webm') {
-            args.push('-c:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0')
-        }
-        else if (to === 'avi') {
-            args.push('-c:v', 'libx264', '-c:a', 'mp3')
+        else {
+            // Add codec and quality settings based on target format
+            if (to.toLowerCase() === 'mp4') {
+                args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', '23')
+            }
+            else if (to.toLowerCase() === 'webm') {
+                args.push('-c:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0')
+            }
+            else if (to.toLowerCase() === 'avi') {
+                args.push('-c:v', 'libx264', '-c:a', 'mp3')
+            }
+
+            // Add optional parameters
+            if (bitrate) {
+                args.push('-b:v', bitrate)
+            }
+            if (resolution) {
+                args.push('-s', resolution)
+            }
+            if (fps) {
+                args.push('-r', fps)
+            }
+
+            // Add audio codec
+            args.push('-c:a', 'aac', '-b:a', '128k')
+
+            // Add progress reporting
+            args.push('-progress', 'pipe:2')
         }
 
-        // Add optional parameters
-        if (bitrate) {
-            args.push('-b:v', bitrate)
-        }
-        if (resolution) {
-            args.push('-s', resolution)
-        }
-        if (fps) {
-            args.push('-r', fps)
+        // Add custom metadata if provided
+        if (metadata && typeof metadata === 'object') {
+            const metadataEntries = Object.entries(metadata)
+            if (metadataEntries.length > 0) {
+                for (const [key, value] of metadataEntries) {
+                    // Sanitize key and value to prevent command injection
+                    const sanitizedKey = key.replace(/[^a-zA-Z0-9_]/g, '')
+                    const sanitizedValue = value.replace(/["';]/g, '')
+                    args.push('-metadata', `${sanitizedKey}=${sanitizedValue}`)
+                }
+                this.#logIfVerbose(
+                    `[convert][${id}] Applying custom metadata: ${metadataEntries
+                        .map(([k, v]) => `${k}="${v}"`)
+                        .join(', ')}`,
+                    isDebug,
+                )
+            }
+            else {
+                this.#logIfVerbose(`[convert][${id}] No custom metadata provided`, isDebug)
+            }
         }
 
-        // Add audio codec
-        args.push('-c:a', 'aac', '-b:a', '128k')
-
-        // Add progress reporting
-        args.push('-progress', 'pipe:2')
 
         args.push(output)
 
@@ -1149,7 +1190,7 @@ export class ConvertVideoController {
 
                         for (const line of lines) {
                             if (line.trim()) {
-                                this.parseFffmpegProgress(id, line.trim(), duration, isDebug)
+                                this.#parseFfmpegProgress(id, line.trim(), duration, isDebug)
                             }
                         }
                     }
