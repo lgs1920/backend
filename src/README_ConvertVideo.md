@@ -26,6 +26,10 @@ MP4, WebM, AVI), with real-time progress tracking via Server-Sent Events (SSE) o
 
 - **Video Conversion**: Converts video files between formats (MP4, WebM, AVI) using FFmpeg, with support for custom
   codecs, bitrates, resolutions, and frame rates.
+- **Audio Control**: Supports audio management with options to remove audio (`none`), copy audio without re-encoding (
+  `copy`), or re-encode audio with a specified codec (`encode`).
+- **Quality Presets**: Applies quality settings via FFmpeg parameters (`-crf` and `-preset`) passed through custom
+  encoding options.
 - **Real-Time Progress Tracking**: Supports SSE for streaming progress updates or polling for periodic status checks.
 - **Metadata Application**: Applies custom metadata (e.g., title, comment) to output videos.
 - **Cancellation Support**: Allows clients to cancel ongoing conversions, terminating FFmpeg processes and cleaning up
@@ -112,12 +116,12 @@ The `ConvertVideoResource` defines the following API endpoints under the `/conve
 
 ### Example Request
 
-Initiate a video conversion from WebM to MP4 using `curl`:
+Initiate a video conversion from WebM to MP4 with audio removed using `curl`:
 
 ```bash
 curl -X POST http://localhost:3333/convert \
   -F "file=@input.webm" \
-  -F "body={\"from\":\"WEBM\",\"to\":\"MP4\",\"params\":[\"-c:v\",\"libx264\",\"-c:a\",\"aac\"],\"metadata\":{\"title\":\"My Video\"}}" \
+  -F "body={\"from\":\"WEBM\",\"to\":\"MP4\",\"customEncoding\":{\"codec\":\"libx264\",\"audioCodec\":\"aac\",\"extraArgs\":[\"-crf\",\"22\",\"-preset\",\"fast\"]},\"audio\":\"none\",\"metadata\":{\"title\":\"My Video\"}}" \
   -H "X-Request-Progress: true" \
   -H "X-Progress-Interval: 500"
 ```
@@ -229,16 +233,29 @@ curl -X DELETE http://localhost:3333/convert/cancel/abc123
     - `body`: JSON object with:
         - `from`: Input format (e.g., `WEBM`, `MP4`).
         - `to`: Output format (e.g., `MP4`, `WEBM`, `AVI`).
-        - `params`: Array of FFmpeg arguments (optional).
-        - `duration`: Video duration in milliseconds (optional).
+      - `customEncoding`: Object with custom FFmpeg settings (optional):
+          - `codec`: Video codec (e.g., `libx264`, `libvpx-vp9`).
+          - `audioCodec`: Audio codec (e.g., `aac`, `opus`).
+          - `extraArgs`: Array of additional FFmpeg arguments, including quality parameters like `-crf` and `-preset` (
+            e.g., `["-crf", "22", "-preset", "fast"]`).
+      - `audio`: Audio handling option (optional, default: `encode`):
+          - `none`: Remove audio from the output.
+          - `copy`: Copy audio without re-encoding.
+          - `encode`: Re-encode audio using the specified `audioCodec`.
         - `metadata`: Key-value pairs for video metadata (optional).
+      - `duration`: Video duration in milliseconds (optional).
         - `verbose`: Boolean for verbose logging (optional).
     - Example:
       ```json
       {
         "from": "WEBM",
         "to": "MP4",
-        "params": ["-c:v", "libx264", "-c:a", "aac"],
+        "customEncoding": {
+          "codec": "libx264",
+          "audioCodec": "aac",
+          "extraArgs": ["-crf", "22", "-preset", "fast"]
+        },
+        "audio": "none",
         "metadata": { "title": "My Video" },
         "duration": 30000,
         "verbose": true

@@ -401,7 +401,7 @@ export class ConvertVideoController {
             })
         }
 
-        // Start FFmpeg if not already running
+        // Ensure FFmpeg is started and duration is available
         if (!conversion.ffmpegProcess && !conversion.done) {
             this.#logInfo(`[progress][${conversionId}] Starting FFmpeg for conversion`, isDebug)
             await this.#startBackgroundConversion(conversionId, {
@@ -433,8 +433,8 @@ export class ConvertVideoController {
                                                           return
                                                       }
 
-                                                      // Send initial event
-                                                      this.#sendStartEvent(controller, conversion.sseStream.encoder, conversionId, isDebug)
+                                                      // Send initial event with duration
+                                                      this.#sendStartEvent(controller, conversion.sseStream.encoder, conversionId, conversion.duration, isDebug)
 
                                                       // Start heartbeat
                                                       const heartbeatInterval = setInterval(() => {
@@ -515,6 +515,7 @@ export class ConvertVideoController {
                     done:    true,
                     percentage: 100,
                     timeSec: Number(conversion.duration ? conversion.duration.toFixed(2) : conversion.timeSec.toFixed(2)),
+                    duration: Number(conversion.duration?.toFixed(2)) || null,
                 }
                 const jsonResponse = JSON.stringify({
                                                         success: true,
@@ -546,6 +547,7 @@ export class ConvertVideoController {
             const progressData = {
                 percentage: Number(conversion.percentage.toFixed(2)) || 0,
                 timeSec: Number(conversion.timeSec.toFixed(2)) || 0,
+                duration: Number(conversion.duration?.toFixed(2)) || null,
             }
             const jsonResponse = JSON.stringify({
                                                     success: true,
@@ -785,15 +787,17 @@ export class ConvertVideoController {
      * @param {ReadableStreamDefaultController} controller - Stream controller
      * @param {TextEncoder} encoder - Text encoder
      * @param {string} id - Conversion ID
+     * @param {number|null} duration - Total duration in seconds
      * @param {boolean} isDebug - Debug logging flag
      */
-    #sendStartEvent = (controller, encoder, id, isDebug) => {
+    #sendStartEvent = (controller, encoder, id, duration, isDebug) => {
         this.#logIfVerbose(`[progress][${id}] Sending start event`, isDebug)
         const startData = {
             started: true,
             conversionId: id,
             percentage: 0,
             timeSec: 0,
+            duration: Number(duration?.toFixed(2)) || null,
         }
         controller.enqueue(encoder.encode(`event: start\ndata: ${JSON.stringify(startData)}\n\n`))
     }
@@ -831,6 +835,7 @@ export class ConvertVideoController {
         const progressData = {
             percentage: Number(percentage.toFixed(2)),
             timeSec: Number(timeSec.toFixed(2)),
+            duration: Number(duration?.toFixed(2)) || null,
         }
         controller.enqueue(encoder.encode(`event: progress\ndata: ${JSON.stringify(progressData)}\n\n`))
     }
@@ -852,6 +857,7 @@ export class ConvertVideoController {
             done:    true,
             percentage: 100,
             timeSec: Number(duration ? duration.toFixed(2) : timeSec.toFixed(2)),
+            duration: Number(duration?.toFixed(2)) || null,
         }
         controller.enqueue(encoder.encode(`event: complete\ndata: ${JSON.stringify(completeData)}\n\n`))
     }
@@ -946,6 +952,12 @@ export class ConvertVideoController {
                 }
             }
         }
+
+        // Validate audio option if present
+        if (body.audio && !['none', 'copy', 'encode'].includes(body.audio)) {
+            this.#logError(`[convert][${id}] Invalid audio option: ${body.audio}`)
+            throw new Error(`Invalid audio option: ${body.audio}. Must be 'none', 'copy', or 'encode'`)
+        }
     }
 
     /**
@@ -1018,9 +1030,9 @@ export class ConvertVideoController {
      * @param {string} input - Input file path
      */
     #processMetadata = async (id, body, input) => {
-        const {from, to, bitrate, resolution, fps} = body
+        const {from, to, bitrate, resolution, fps, audio} = body
 
-        this.#logInfo(`[convert][${id}] Starting conversion: ${from} → ${to}`, true)
+        this.#logInfo(`[convert][${id}] Starting conversion: ${from} → ${to}${audio ? `, audio: ${audio}` : ''}`, true)
 
         if (bitrate) {
             this.#logIfVerbose(`[convert][${id}] Target bitrate: ${bitrate}`)
@@ -1030,6 +1042,9 @@ export class ConvertVideoController {
         }
         if (fps) {
             this.#logIfVerbose(`[convert][${id}] Target FPS: ${fps}`)
+        }
+        if (audio) {
+            this.#logIfVerbose(`[convert][${id}] Audio option: ${audio}`)
         }
     }
 
@@ -1041,7 +1056,7 @@ export class ConvertVideoController {
      * @param {number|null} duration - Total duration in seconds
      * @param {boolean} isDebug - Debug logging flag
      */
-    #parseFfmpegProgress = (id, line, duration, isDebug) => {
+    #parseFffmpegProgress = (id, line, duration, isDebug) => {
         if (!activeConversions.has(id)) {
             return
         }
@@ -1085,7 +1100,7 @@ export class ConvertVideoController {
      * @param {boolean} isDebug - Debug logging flag
      */
     #executeConversion = async (id, input, output, body, duration, isDebug) => {
-        const {to, bitrate, resolution, fps, from, metadata, customEncoding} = body
+        const {to, bitrate, resolution, fps, from, metadata, customEncoding, audio = 'encode'} = body
 
         // Initialize FFmpeg args
         const args = ['-i', input, '-y'] // -y to overwrite output
@@ -1095,26 +1110,46 @@ export class ConvertVideoController {
             this.#logIfVerbose(`[convert][${id}] Same input/output format (${from}), copying streams without re-encoding`, isDebug)
         }
         else {
-            // If customEncoding is provided, override default encoding logic
+            // Handle audio option
+            if (audio === 'none') {
+                args.push('-an')
+                this.#logIfVerbose(`[convert][${id}] Audio disabled`, isDebug)
+            }
+            else if (audio === 'copy') {
+                args.push('-c:a', 'copy')
+                this.#logIfVerbose(`[convert][${id}] Copying audio stream without re-encoding`, isDebug)
+            }
+            else if (audio === 'encode') {
+                if (customEncoding?.audioCodec) {
+                    args.push('-c:a', customEncoding.audioCodec)
+                    this.#logIfVerbose(`[convert][${id}] Using custom audio codec: ${customEncoding.audioCodec}`, isDebug)
+                }
+                else {
+                    // Default audio codec based on output format
+                    if (to.toLowerCase() === 'avi') {
+                        args.push('-c:a', 'mp3')
+                    }
+                    else {
+                        args.push('-c:a', 'aac', '-b:a', '128k')
+                    }
+                    this.#logIfVerbose(`[convert][${id}] Using default audio codec: ${to.toLowerCase() === 'avi' ? 'mp3' : 'aac'}`, isDebug)
+                }
+            }
+
+            // If customEncoding is provided, override default video encoding logic
             if (customEncoding) {
                 if (customEncoding.codec) {
                     args.push('-c:v', customEncoding.codec)
                 }
-
-                if (customEncoding.audioCodec) {
-                    args.push('-c:a', customEncoding.audioCodec)
-                }
-
                 if (customEncoding.videoFilters) {
                     args.push('-vf', customEncoding.videoFilters)
                 }
-
                 if (Array.isArray(customEncoding.extraArgs)) {
                     args.push(...customEncoding.extraArgs)
                 }
             }
             else {
-                // Default encoding logic based on output format
+                // Default video encoding logic based on output format
                 if (to.toLowerCase() === 'mp4') {
                     args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', '23')
                 }
@@ -1122,11 +1157,8 @@ export class ConvertVideoController {
                     args.push('-c:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0')
                 }
                 else if (to.toLowerCase() === 'avi') {
-                    args.push('-c:v', 'libx264', '-c:a', 'mp3')
+                    args.push('-c:v', 'libx264')
                 }
-
-                // Apply standard audio codec unless overridden
-                args.push('-c:a', 'aac', '-b:a', '128k')
             }
 
             // Optional dynamic parameters
@@ -1168,6 +1200,8 @@ export class ConvertVideoController {
 
         args.push(output)
 
+        console.log(args)
+
         this.#logInfo(`[convert][${id}] Executing FFmpeg: ffmpeg ${args.join(' ')}`, isDebug)
 
         return new Promise((resolve, reject) => {
@@ -1208,7 +1242,7 @@ export class ConvertVideoController {
 
                         for (const line of lines) {
                             if (line.trim()) {
-                                this.#parseFfmpegProgress(id, line.trim(), duration, isDebug)
+                                this.#parseFffmpegProgress(id, line.trim(), duration, isDebug)
                             }
                         }
                     }
