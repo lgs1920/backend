@@ -1085,29 +1085,51 @@ export class ConvertVideoController {
      * @param {boolean} isDebug - Debug logging flag
      */
     #executeConversion = async (id, input, output, body, duration, isDebug) => {
-        const {to, bitrate, resolution, fps, from, metadata} = body
+        const {to, bitrate, resolution, fps, from, metadata, customEncoding} = body
 
-        // Build FFmpeg command
+        // Initialize FFmpeg args
         const args = ['-i', input, '-y'] // -y to overwrite output
 
-        // Handle same input/output format with stream copying
         if (from.toLowerCase() === to.toLowerCase()) {
             args.push('-c', 'copy')
             this.#logIfVerbose(`[convert][${id}] Same input/output format (${from}), copying streams without re-encoding`, isDebug)
         }
         else {
-            // Add codec and quality settings based on target format
-            if (to.toLowerCase() === 'mp4') {
-                args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', '23')
+            // If customEncoding is provided, override default encoding logic
+            if (customEncoding) {
+                if (customEncoding.codec) {
+                    args.push('-c:v', customEncoding.codec)
+                }
+
+                if (customEncoding.audioCodec) {
+                    args.push('-c:a', customEncoding.audioCodec)
+                }
+
+                if (customEncoding.videoFilters) {
+                    args.push('-vf', customEncoding.videoFilters)
+                }
+
+                if (Array.isArray(customEncoding.extraArgs)) {
+                    args.push(...customEncoding.extraArgs)
+                }
             }
-            else if (to.toLowerCase() === 'webm') {
-                args.push('-c:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0')
-            }
-            else if (to.toLowerCase() === 'avi') {
-                args.push('-c:v', 'libx264', '-c:a', 'mp3')
+            else {
+                // Default encoding logic based on output format
+                if (to.toLowerCase() === 'mp4') {
+                    args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', '23')
+                }
+                else if (to.toLowerCase() === 'webm') {
+                    args.push('-c:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0')
+                }
+                else if (to.toLowerCase() === 'avi') {
+                    args.push('-c:v', 'libx264', '-c:a', 'mp3')
+                }
+
+                // Apply standard audio codec unless overridden
+                args.push('-c:a', 'aac', '-b:a', '128k')
             }
 
-            // Add optional parameters
+            // Optional dynamic parameters
             if (bitrate) {
                 args.push('-b:v', bitrate)
             }
@@ -1118,10 +1140,7 @@ export class ConvertVideoController {
                 args.push('-r', fps)
             }
 
-            // Add audio codec
-            args.push('-c:a', 'aac', '-b:a', '128k')
-
-            // Add progress reporting
+            // Enable progress tracking
             args.push('-progress', 'pipe:2')
         }
 
@@ -1146,7 +1165,6 @@ export class ConvertVideoController {
                 this.#logIfVerbose(`[convert][${id}] No custom metadata provided`, isDebug)
             }
         }
-
 
         args.push(output)
 
