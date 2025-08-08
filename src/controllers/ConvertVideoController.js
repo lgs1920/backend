@@ -744,6 +744,17 @@ export class ConvertVideoController {
     }
 
     /**
+     * Sets and generates a full path  according to the predefined
+     * backend ffmpeg configuration path.
+     *
+     * @param {string} path - The relative path .
+     * @returns {string} The full path.
+     */
+    #setPath = (path) => {
+        return `${configuration.backend.ffmpeg}/${path}`
+    }
+
+    /**
      * Sets Server-Sent Events headers for streaming response
      * @private
      * @param {Object} set - Response headers object
@@ -1200,12 +1211,12 @@ export class ConvertVideoController {
 
         args.push(output)
 
-        console.log(args)
 
         this.#logInfo(`[convert][${id}] Executing FFmpeg: ffmpeg ${args.join(' ')}`, isDebug)
 
         return new Promise((resolve, reject) => {
-            const ffmpeg = Bun.spawn(['ffmpeg', ...args], {
+
+            const ffmpeg = Bun.spawn([this.#setPath('ffmpeg'), ...args], {
                 stderr: 'pipe',
                 stdout: 'pipe',
             })
@@ -1298,6 +1309,7 @@ export class ConvertVideoController {
         })
     }
 
+
     /**
      * Extracts video duration using FFprobe
      * @private
@@ -1307,7 +1319,7 @@ export class ConvertVideoController {
     #extractDuration = async (input) => {
         return new Promise((resolve, reject) => {
             const ffprobe = Bun.spawn([
-                                          'ffprobe',
+                                          this.#setPath('ffprobe'),
                                           '-v', 'quiet',
                                           '-print_format', 'json',
                                           '-show_format',
