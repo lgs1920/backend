@@ -7,8 +7,8 @@
  * Author : LGS1920 Team                                                                                              *
  * email: contact@lgs1920.fr                                                                                          *
  *                                                                                                                    *
- * Created on: 2025-08-05                                                                                             *
- * Last modified: 2025-08-05                                                                                          *
+ * Created on: 2025-08-11                                                                                             *
+ * Last modified: 2025-08-11                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2025 LGS1920                                                                                           *
@@ -64,12 +64,20 @@ const green = '\x1b[32m'
 const reset = '\x1b[0m'
 
 /** Main application instance */
+const isDev = process.env.NODE_ENV === 'development';
+console.log(process.env.NODE_ENV)
 
 const app = new Elysia() //
     .use(
         cors({
                  preflight: true,
-                 origin:    /^https?:\/\/([a-zA-Z0-9-]+\.)*lgs1920\.fr(?::\d+)?$/,
+                 origin: isDev
+                         ? [
+                         'http://localhost:5173',
+                         'https://dev.lgs1920.fr',
+                     ]
+                         : /^https?:\/\/([a-zA-Z0-9-]+\.)*lgs1920\.fr(?::\d+)?$/,
+
                  methods: ['GET', 'POST', 'DELETE'],
                  allowedHeaders: ['Content-Type', 'X-Conversion-Id', 'X-Request-Progress', 'X-Progress-Interval'],
                  exposedHeaders: ['X-Conversion-Id'],
