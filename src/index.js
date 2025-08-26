@@ -7,8 +7,8 @@
  * Author : LGS1920 Team                                                                                              *
  * email: contact@lgs1920.fr                                                                                          *
  *                                                                                                                    *
- * Created on: 2025-08-11                                                                                             *
- * Last modified: 2025-08-11                                                                                          *
+ * Created on: 2025-08-26                                                                                             *
+ * Last modified: 2025-08-26                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2025 LGS1920                                                                                           *
@@ -65,7 +65,6 @@ const reset = '\x1b[0m'
 
 /** Main application instance */
 const isDev = process.env.NODE_ENV === 'development';
-console.log(process.env.NODE_ENV)
 
 const app = new Elysia() //
     .use(
@@ -125,4 +124,4 @@ new ConvertVideoResource(app)
 app.listen(configuration.backend.port)
 
 // Log server startup information
-console.log(`${green}${configuration.backend.name}${reset} is running at ${yellow}${configuration.backend.domain}:${app.server?.port}${reset}.`)
+console.log(`${green}${configuration.backend.name}${yellow}[${version.backend}]${reset} is running at ${yellow}${configuration.backend.domain}:${app.server?.port}${reset}.`)
