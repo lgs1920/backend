@@ -1,9 +1,8 @@
-
 /**********************************************************************************************************************
  *                                                                                                                    *
  * This file is part of the LGS1920/backend project.                                                                  *
  *                                                                                                                    *
- * File: VersionsResource.js                                                                                          *
+ * File: ReadFileResource.js                                                                                          *
  *                                                                                                                    *
  * Author : LGS1920 Team                                                                                              *
  * email: contact@lgs1920.fr                                                                                          *
@@ -15,32 +14,37 @@
  * Copyright © 2025 LGS1920                                                                                           *
  **********************************************************************************************************************/
 
-import Elysia                from 'elysia'
-import { VersionsController }              from '../controllers/VersionsController'
-import {  VERSIONS_ROUTE } from '../index'
+import Elysia                 from 'elysia'
+import { ReadFileController } from '../controllers/ReadFileController'
 
 
-export class VersionsResource {
+export class ReadFileResource {
 
-    controller = new VersionsController()
+    controller = new ReadFileController()
 
     constructor(app) {
-        app.get(`${VERSIONS_ROUTE}`,
-                 this.controller.versions,
-                 {
+        app.get('/read', this.controller.readFile, {
+
                      detail: {
+                         query:       {
+                             file: {
+                                 type:        'string',
+                                 description: 'Full path to the file',
+                                 required:    true,
+                             },
+                         },
                          tags:        this.tags,
-                         description: 'Get Backend and API Versions',
-                         produces:    ['application/json'],
+                         description: 'API Read File',
                          responses:   {
                              200: {
-                                 description: 'The versions you requested',
+                                 description: 'The file content you requested',
                              },
                              500: {
                                  description: 'Internal error',
                              },
                          },
                      },
-                 })
+                 },
+            )
     }
 }
