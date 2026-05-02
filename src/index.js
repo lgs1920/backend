@@ -7,11 +7,11 @@
  * Author : LGS1920 Team                                                                                              *
  * email: contact@lgs1920.fr                                                                                          *
  *                                                                                                                    *
- * Created on: 2025-08-26                                                                                             *
- * Last modified: 2025-08-26                                                                                          *
+ * Created on: 2026-05-02                                                                                             *
+ * Last modified: 2026-05-02                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
- * Copyright © 2025 LGS1920                                                                                           *
+ * Copyright © 2026 LGS1920                                                                                           *
  **********************************************************************************************************************/
 
 import cors       from '@elysiajs/cors'
@@ -20,7 +20,9 @@ import { Elysia } from 'elysia'
 import fs         from 'fs'
 import version                  from '../version.json'
 import { ChangelogResource }    from './resources/ChangelogResource'
+import { CloudAuthResource }     from './resources/CloudAuthResource.js'
 import { ConvertVideoResource } from './resources/ConvertVideoResource'
+import { JourneyImportResource } from './resources/JourneyImportResource.js'
 import { PingResource }         from './resources/PingResource'
 import { ReadFileResource }     from './resources/ReadFileResource'
 import { VersionsResource }     from './resources/VersionsResource'
@@ -40,6 +42,10 @@ export const CONVERT_VIDEO_ROUTE = {
     download: '/download',
     cancel:   '/cancel',
 }
+/** Route for journey imports */
+export const JOURNEY_ROUTE = 'journey'
+/** Route for cloud OAuth authentication */
+export const CLOUD_AUTH_ROUTE = 'cloud-auth'
 
 /** Available platform environments */
 export const platforms = {
@@ -61,7 +67,43 @@ configuration.backend.home = configuration.backend.home || process.env.LGS1920_B
 
 const yellow = '\x1b[33m'
 const green = '\x1b[32m'
+const orange = '\x1b[38;5;208m'
 const reset = '\x1b[0m'
+
+const startupTime = new Intl.DateTimeFormat('en-GB', {
+    hour:   '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+}).format(new Date())
+
+const isReloadRuntime = () => process.execArgv.includes('--watch') || process.execArgv.includes('--hot')
+
+const isHotStartup = () => {
+    if (!isReloadRuntime()) {
+        return false
+    }
+
+    const startupStateKey = Symbol.for('lgs1920.backend.startup.seen')
+    if (globalThis[startupStateKey]) {
+        return true
+    }
+
+    globalThis[startupStateKey] = true
+
+    const safeWorkingDirectory = process.cwd().replace(/[^a-zA-Z0-9.-]+/g, '_')
+    const startupMarkerPath = `${process.env.TMPDIR || '/tmp'}/lgs1920-backend-${safeWorkingDirectory}-${process.ppid}.startup`
+    const wasAlreadyStarted = fs.existsSync(startupMarkerPath)
+
+    try {
+        fs.writeFileSync(startupMarkerPath, `${process.pid}:${Date.now()}`)
+    }
+    catch {
+        return false
+    }
+
+    return wasAlreadyStarted
+}
 
 /** Main application instance */
 const isDev = process.env.NODE_ENV === 'development';
@@ -119,9 +161,12 @@ new ReadFileResource(app)
 new VersionsResource(app)
 new ChangelogResource(app)
 new ConvertVideoResource(app)
+new CloudAuthResource(app)
+new JourneyImportResource(app)
 
 // Start the server
 app.listen(configuration.backend.port)
 
 // Log server startup information
-console.log(`${green}${configuration.backend.name}${yellow}[${version.backend}]${reset} is running at ${yellow}${configuration.backend.domain}:${app.server?.port}${reset}.`)
+const startupStatus = isHotStartup() ? `${orange}[hot reload]${reset}` : `${yellow}[start]${reset}`
+console.log(`${green}[${startupTime}]${reset} ${startupStatus} ${green}${configuration.backend.name}${yellow}[${version.backend}]${reset} is running at ${yellow}${configuration.backend.domain}:${app.server?.port}${reset}.`)
