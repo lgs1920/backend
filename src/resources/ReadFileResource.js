@@ -22,15 +22,29 @@ export class ReadFileResource {
 
     controller = new ReadFileController()
 
-    constructor(app) {
+    /**
+     * Register the internal file-reading route.
+     *
+     * @param {object} app Elysia application instance.
+     * @param {object} options Route security options.
+     * @param {Function} [options.beforeHandle] Internal access guard.
+     */
+    constructor(app, {beforeHandle = undefined} = {}) {
         app.get('/read', this.controller.readFile, {
+                     beforeHandle,
 
                      detail: {
                          query:       {
                              file: {
                                  type:        'string',
-                                 description: 'Full path to the file',
+                                 description: 'Relative path to a file below the selected application root. Remote URLs and traversal are rejected.',
                                  required:    true,
+                             },
+                             path: {
+                                 type:        'string',
+                                 enum:        ['backend', 'studio'],
+                                 description: 'Application root. Defaults to studio.',
+                                 required:    false,
                              },
                          },
                          tags:        this.tags,

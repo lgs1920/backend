@@ -20,6 +20,7 @@
 import *   as fspromises from 'node:fs/promises'
 import * as path      from 'node:path'
 import { FileUtils }  from '../utils/FileUtils'
+import { resolveSafeChildPath } from '../utils/PathSecurity.js'
 import { Controller } from './Controller'
 
 export class ChangelogController extends Controller {
@@ -58,9 +59,36 @@ export class ChangelogController extends Controller {
         }
     }
 
-    read = async({ params: { file } })=> {
-        const path = Bun.file(`${this.assetDirectoryPath(this.CHANGELOG_DIR)}${decodeURIComponent(file)}`)
-        return {content:await path.text()}
+    /**
+     * Read one Markdown changelog file from the configured changelog directory.
+     *
+     * @param {object} context Elysia request context.
+     * @returns {Promise<object>} Changelog content or a controlled client error.
+     */
+    read = async({params: {file}, set})=> {
+        let decodedFile
+        try {
+            decodedFile = decodeURIComponent(file)
+        }
+        catch {
+            set.status = 400
+            return {success: false, error: 'Invalid changelog file name'}
+        }
+
+        const directory = path.resolve(this.assetDirectoryPath(this.CHANGELOG_DIR))
+        const target = resolveSafeChildPath(directory, decodedFile)
+        if (!target || path.extname(decodedFile).toLowerCase() !== '.md' || path.basename(decodedFile) !== decodedFile) {
+            set.status = 400
+            return {success: false, error: 'Invalid changelog file name'}
+        }
+
+        try {
+            return {content: await fspromises.readFile(target, 'utf8')}
+        }
+        catch {
+            set.status = 404
+            return {success: false, error: 'Changelog file not found'}
+        }
     }
 
 
