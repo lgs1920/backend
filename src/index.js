@@ -22,6 +22,7 @@ import version                  from '../version.json'
 import { ChangelogResource }    from './resources/ChangelogResource'
 import { CloudAuthResource }     from './resources/CloudAuthResource.js'
 import { ConvertVideoResource } from './resources/ConvertVideoResource'
+import { CountResource }         from './resources/CountResource.js'
 import { JourneyImportResource } from './resources/JourneyImportResource.js'
 import { PingResource }         from './resources/PingResource'
 import { ReadFileResource }     from './resources/ReadFileResource'
@@ -62,7 +63,7 @@ export const buildDate = JSON.parse(fs.readFileSync('build.json', 'utf8'))
 
 // Set default environment variables if not provided
 configuration.studio.home = configuration.studio.home || process.env.LGS1920_STUDIO_HOME
-configuration.backend.home = configuration.backend.home || process.env.LGS1920_BACKEND_HOME
+configuration.backend.home = configuration.backend.home || process.env.LGS1920_BACKEND_HOME || process.cwd()
 
 
 const yellow = '\x1b[33m'
@@ -135,6 +136,7 @@ app.use(swagger({
                         },
                         tags:    [
                             {name: 'file', description: 'File-related endpoints'},
+                            {name: 'count', description: 'Real-time aggregate counters and UTC period history'},
                         ],
                         servers: [
                             {
@@ -163,6 +165,10 @@ new ChangelogResource(app)
 new ConvertVideoResource(app)
 new CloudAuthResource(app)
 new JourneyImportResource(app)
+new CountResource(app, {
+    backendHome:              configuration.backend.home,
+    registerShutdownHandlers: true,
+})
 
 // Start the server
 app.listen(configuration.backend.port)
