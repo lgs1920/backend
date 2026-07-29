@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Testing"
+  short_description: "Test Bun and Elysia backend behavior"
+  default_prompt: "Use $lgs-1920-backend-testing to add or run focused tests for backend routes, controllers, security boundaries, and asynchronous jobs."

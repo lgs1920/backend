@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cloud OAuth Backend"
+  short_description: "Maintain cloud OAuth flows and sessions"
+  default_prompt: "Use $lgs-1920-backend-cloud-oauth to modify provider authentication, callbacks, tokens, cookies, and cloud sessions safely."

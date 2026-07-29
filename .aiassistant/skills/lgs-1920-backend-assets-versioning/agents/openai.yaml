@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Assets and Versioning"
+  short_description: "Maintain versions, changelogs, and file assets"
+  default_prompt: "Use $lgs-1920-backend-assets-versioning to modify backend version metadata, changelogs, or file-backed endpoints safely."

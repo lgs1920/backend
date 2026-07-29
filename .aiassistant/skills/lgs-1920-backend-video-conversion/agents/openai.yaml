@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Video Conversion"
+  short_description: "Maintain FFmpeg conversion workflows"
+  default_prompt: "Use $lgs-1920-backend-video-conversion to modify video conversion, progress, cancellation, downloads, and temporary-file cleanup."

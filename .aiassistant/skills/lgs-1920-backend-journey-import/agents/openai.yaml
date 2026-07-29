@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Journey Import"
+  short_description: "Maintain backend journey import endpoints"
+  default_prompt: "Use $lgs-1920-backend-journey-import to modify journey import parsing, validation, normalization, and upstream file retrieval."
