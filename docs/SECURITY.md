@@ -78,9 +78,10 @@ and enforces a size limit. Changelog file reads also reject traversal and
 non-Markdown file names.
 
 Count event payloads may include a browser-provided IANA `timeZone` value. The
-backend validates this value and uses UTC when it is omitted. The value only
-provides calendar context for aggregate periods; it is not used as an identity
-or authentication factor and must not be logged.
+backend validates this value and uses `LGS1920_COUNT_DEFAULT_TIME_ZONE` when it
+is omitted, with UTC as the default. The value only provides calendar context
+for aggregate periods; it is not used as an identity or authentication factor
+and must not be logged.
 
 The following routes remain browser-facing and do not require the internal
 token:
