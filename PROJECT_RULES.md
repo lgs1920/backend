@@ -1,0 +1,72 @@
+# Project rules
+
+This is the canonical source for the LGS1920 backend AI-agent and development rules. The backend is the Bun/Elysia service consumed by LGS1920 Studio.
+
+## 1. Core directives
+
+- **Language:** All conversational responses must be in French.
+- **Documentation:** JSDoc, inline comments, code documentation, API descriptions, and project documentation must be in professional English.
+- **Scope:** Inspect the current Git status before editing and preserve unrelated user changes.
+- **Autonomy:** Make safe local decisions when the intended behavior is clear. Ask before changing an external contract, deploying, publishing, or discarding user work.
+- **Logging:** Use direct `console.log`, `console.error`, or `console.table` only when direct logging is explicitly requested. Never log secrets.
+
+## 2. Coding style
+
+- Use Bun as the runtime and follow the existing JavaScript module style.
+- Do not introduce semicolons in new or modified code. Do not reformat unrelated legacy code solely to remove existing semicolons.
+- Prefer named exports and do not add `export default`.
+- Use arrow functions for functions and class fields, except for class constructors.
+- Add a professional English JSDoc block to every new or modified function and method.
+- Keep files focused. Split a file when it becomes difficult to review or exceeds 1500 lines.
+- Preserve the existing import paths and `.js` extension conventions in the files being changed.
+
+## 3. Architecture
+
+- **Runtime:** Bun.
+- **HTTP framework:** Elysia.
+- **Route wiring:** `src/index.js` and `src/resources/`.
+- **Request orchestration:** `src/controllers/`.
+- **Shared behavior:** `src/utils/` and `src/controllers/conversions.js`.
+- Keep route registration, controller behavior, and reusable utilities separate.
+- Keep OpenAPI metadata, CORS headers, response envelopes, and client-facing route constants synchronized with the API implementation.
+- Do not introduce another backend framework, ORM, persistence layer, or process manager without explicit approval.
+
+## 4. Security and reliability
+
+- Validate path parameters, query parameters, JSON, multipart data, file names, URLs, provider identifiers, and redirect targets at the boundary.
+- Prevent path traversal, SSRF, unsafe redirects, unbounded downloads, shell argument injection, and uncontrolled temporary-file growth.
+- Keep OAuth secrets, tokens, cookies, credentials, and private server configuration out of logs, responses, generated bundles, and Git.
+- Use bounded timeouts, size limits, cancellation, and cleanup for remote requests and FFmpeg jobs.
+- Return controlled client errors. Do not expose stack traces, local paths, upstream bodies, tokens, or raw process commands.
+- Make cleanup idempotent and safe when a job, request, or process has already ended.
+
+## 5. Documentation and testing
+
+- Update `README.md`, `docs/`, API descriptions, and nearby documentation when behavior or configuration changes.
+- Document environment variables, provider requirements, route contracts, limits, error codes, and deployment assumptions in English.
+- Add relevant regression tests for every behavior change. Prefer deterministic tests around pure helpers and isolated route/controller contracts.
+- Do not import `src/index.js` in tests if doing so starts a listening server. Extract an app factory when needed.
+- Validate with focused tests, `bun build`, and static checks appropriate to the change. Do not run the development server manually as a validation step.
+
+## 6. Versioning and deployment
+
+- Treat `version.json` as the current backend/API version source.
+- Inspect `build.js`, `build.json`, `deploy.js`, `deployment/`, `servers.json`, and `dist/` before release changes.
+- Never edit generated bundles manually. Regenerate release artifacts from source.
+- Never deploy, publish, or overwrite an existing versioned distribution without an explicit user request and a scope check.
+- Keep dependency manifests and the Bun lockfile synchronized when dependencies change.
+
+## 7. Git workflow
+
+- Create a commit only when the user explicitly requests one.
+- Use key-based commit prefixes: `feat`, `fix`, `refactor`, `docs`, `style`, `test`, or `chore`.
+- Keep each commit focused and inspect staged content before committing.
+- Never stage `.env`, credentials, tokens, local machine configuration, or unrelated generated noise.
+- Never reset, checkout, or discard user changes without explicit authorization.
+- Report the exact commit scope and remaining working-tree changes after a commit.
+
+## 8. Skill selection
+
+- Use the `lgs-1920-backend-*` skills for backend files and backend-specific behavior.
+- Use the copied `lgs-1920-studio-*` skills only when the task explicitly crosses into Studio behavior or requires shared product context.
+- Prefer the narrowest applicable skill, then combine it with the testing or release skill when the change affects those concerns.

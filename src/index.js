@@ -22,10 +22,17 @@ import version                  from '../version.json'
 import { ChangelogResource }    from './resources/ChangelogResource'
 import { CloudAuthResource }     from './resources/CloudAuthResource.js'
 import { ConvertVideoResource } from './resources/ConvertVideoResource'
+import { CountResource }         from './resources/CountResource.js'
 import { JourneyImportResource } from './resources/JourneyImportResource.js'
 import { PingResource }         from './resources/PingResource'
 import { ReadFileResource }     from './resources/ReadFileResource'
 import { VersionsResource }     from './resources/VersionsResource'
+import {
+    createInternalApiGuard,
+    createSecurityHeadersHook,
+    getAllowedOrigins,
+} from './utils/BackendSecurity.js'
+import { resolveBackendHost } from './utils/BackendServerConfig.js'
 
 /** Route for accessing changelog */
 export const CHANGELOG_ROUTE = 'changelog'
@@ -62,7 +69,7 @@ export const buildDate = JSON.parse(fs.readFileSync('build.json', 'utf8'))
 
 // Set default environment variables if not provided
 configuration.studio.home = configuration.studio.home || process.env.LGS1920_STUDIO_HOME
-configuration.backend.home = configuration.backend.home || process.env.LGS1920_BACKEND_HOME
+configuration.backend.home = configuration.backend.home || process.env.LGS1920_BACKEND_HOME || process.cwd()
 
 
 const yellow = '\x1b[33m'
@@ -106,25 +113,29 @@ const isHotStartup = () => {
 }
 
 /** Main application instance */
-const isDev = process.env.NODE_ENV === 'development';
+const deploymentPlatform = configuration.platform ?? platforms.PROD
+const isDevelopment = deploymentPlatform === platforms.DEV || process.env.NODE_ENV === 'development'
+const allowedOrigins = getAllowedOrigins(deploymentPlatform)
+const publicHttps = process.env.LGS1920_PUBLIC_HTTPS === 'true'
+const internalApiGuard = createInternalApiGuard({allowWithoutToken: isDevelopment})
+const backendHost = resolveBackendHost({
+    environmentHost: process.env.LGS1920_BACKEND_HOST,
+    configuredHost:  configuration.backend.host,
+})
 
 const app = new Elysia() //
     .use(
         cors({
                  preflight: true,
-                 origin: isDev
-                         ? [
-                         'http://localhost:5173',
-                         'https://dev.lgs1920.fr',
-                     ]
-                         : /^https?:\/\/([a-zA-Z0-9-]+\.)*lgs1920\.fr(?::\d+)?$/,
+                 origin: allowedOrigins,
 
                  methods: ['GET', 'POST', 'DELETE'],
-                 allowedHeaders: ['Content-Type', 'X-Conversion-Id', 'X-Request-Progress', 'X-Progress-Interval'],
+                 allowedHeaders: ['Accept', 'Authorization', 'Content-Type', 'X-Conversion-Id', 'X-Request-Progress', 'X-Progress-Interval'],
                  exposedHeaders: ['X-Conversion-Id'],
                  credentials:    true,
              }),
     )
+    .onAfterHandle(createSecurityHeadersHook({publicHttps}))
 
 // /** Configure Swagger UI for API documentation */
 app.use(swagger({
@@ -135,6 +146,7 @@ app.use(swagger({
                         },
                         tags:    [
                             {name: 'file', description: 'File-related endpoints'},
+                            {name: 'count', description: 'Real-time aggregate counters and client-time-zone period history'},
                         ],
                         servers: [
                             {
@@ -157,15 +169,19 @@ app.get('/', ({redirect}) => {
 
 // Initialize resource routes
 new PingResource(app)
-new ReadFileResource(app)
+new ReadFileResource(app, {beforeHandle: internalApiGuard})
 new VersionsResource(app)
 new ChangelogResource(app)
-new ConvertVideoResource(app)
+new ConvertVideoResource(app, {beforeHandle: internalApiGuard})
 new CloudAuthResource(app)
 new JourneyImportResource(app)
+new CountResource(app, {
+    backendHome:              configuration.backend.home,
+    registerShutdownHandlers: true,
+})
 
 // Start the server
-app.listen(configuration.backend.port)
+app.listen({hostname: backendHost, port: configuration.backend.port})
 
 // Log server startup information
 const startupStatus = isHotStartup() ? `${orange}[hot reload]${reset}` : `${yellow}[start]${reset}`

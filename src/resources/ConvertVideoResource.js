@@ -22,13 +22,20 @@ export class ConvertVideoResource {
 
     controller = new ConvertVideoController()
 
-    constructor(app) {
+    /**
+     * Register video conversion routes behind the internal access guard.
+     *
+     * @param {object} app Elysia application instance.
+     * @param {object} options Route security options.
+     * @param {Function} [options.beforeHandle] Internal access guard.
+     */
+    constructor(app, {beforeHandle = undefined} = {}) {
         app.group(CONVERT_VIDEO_ROUTE.convert, (group) =>
             group
-                .post('', this.controller.convertVideo.bind(this.controller))
-                .get(`${CONVERT_VIDEO_ROUTE.progress}/:id`, this.controller.startProgressStream.bind(this.controller))
-                .get(`${CONVERT_VIDEO_ROUTE.download}/:id`, this.controller.downloadConvertedFile.bind(this.controller))
-                .delete(`${CONVERT_VIDEO_ROUTE.cancel}/:id`, this.controller.cancelConversion.bind(this.controller)), // ✅
+                .post('', this.controller.convertVideo.bind(this.controller), {beforeHandle})
+                .get(`${CONVERT_VIDEO_ROUTE.progress}/:id`, this.controller.startProgressStream.bind(this.controller), {beforeHandle})
+                .get(`${CONVERT_VIDEO_ROUTE.download}/:id`, this.controller.downloadConvertedFile.bind(this.controller), {beforeHandle})
+                .delete(`${CONVERT_VIDEO_ROUTE.cancel}/:id`, this.controller.cancelConversion.bind(this.controller), {beforeHandle}), // ✅
                                                                                                                       // Utiliser
                                                                                                                       // la
                                                                                                                       // constante
