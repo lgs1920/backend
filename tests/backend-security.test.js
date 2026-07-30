@@ -4,6 +4,7 @@ import {
     createSecurityHeadersHook,
     getAllowedOrigins,
 } from '../src/utils/BackendSecurity.js'
+import { resolveBackendHost } from '../src/utils/BackendServerConfig.js'
 import { resolveSafeChildPath } from '../src/utils/PathSecurity.js'
 
 const originalEnvironment = {...process.env}
@@ -25,6 +26,12 @@ const restoreEnvironment = () => {
 afterEach(restoreEnvironment)
 
 describe('backend security', () => {
+    test('keeps the legacy public bind until a reverse proxy is configured', () => {
+        expect(resolveBackendHost()).toBe('0.0.0.0')
+        expect(resolveBackendHost({configuredHost: '127.0.0.1'})).toBe('127.0.0.1')
+        expect(resolveBackendHost({environmentHost: '127.0.0.2', configuredHost: '127.0.0.1'})).toBe('127.0.0.2')
+    })
+
     test('uses exact environment-specific CORS origins', () => {
         expect(getAllowedOrigins('production')).toEqual([
             'https://studio.lgs1920.fr',

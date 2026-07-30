@@ -32,6 +32,7 @@ import {
     createSecurityHeadersHook,
     getAllowedOrigins,
 } from './utils/BackendSecurity.js'
+import { resolveBackendHost } from './utils/BackendServerConfig.js'
 
 /** Route for accessing changelog */
 export const CHANGELOG_ROUTE = 'changelog'
@@ -117,7 +118,10 @@ const isDevelopment = deploymentPlatform === platforms.DEV || process.env.NODE_E
 const allowedOrigins = getAllowedOrigins(deploymentPlatform)
 const publicHttps = process.env.LGS1920_PUBLIC_HTTPS === 'true'
 const internalApiGuard = createInternalApiGuard({allowWithoutToken: isDevelopment})
-const backendHost = process.env.LGS1920_BACKEND_HOST || configuration.backend.host || '127.0.0.1'
+const backendHost = resolveBackendHost({
+    environmentHost: process.env.LGS1920_BACKEND_HOST,
+    configuredHost:  configuration.backend.host,
+})
 
 const app = new Elysia() //
     .use(
