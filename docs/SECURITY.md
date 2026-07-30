@@ -9,6 +9,10 @@ public Site. A security configuration is incomplete if it protects the backend
 but leaves a client calling a private port, exposes a server token in browser
 code, or mixes staging and production origins.
 
+Until a local reverse proxy is available, the backend keeps its legacy
+all-interface bind when `LGS1920_BACKEND_HOST` and `backend.host` are both
+unset. Set `LGS1920_BACKEND_HOST=127.0.0.1` when the reverse proxy is ready.
+
 ## Environment configuration
 
 Configure these variables separately for development, test, staging, and
@@ -145,6 +149,29 @@ the token there.
 The reverse proxy should also provide request size limits, timeouts, and rate
 limits. Application endpoints must still validate input and avoid exposing
 upstream errors, local paths, or credentials.
+
+### Activation when the reverse proxy is introduced
+
+Complete the following transition before making the backend publicly
+reachable through the proxy:
+
+1. Provision the proxy with a certificate for the public API hostname and
+   redirect HTTP to HTTPS.
+2. Configure the proxy to forward only the intended public routes to the
+   matching backend process and private port.
+3. Set `LGS1920_BACKEND_HOST=127.0.0.1` when the proxy and backend share a host.
+   When they use separate hosts or containers, use a private interface and
+   firewall rules that allow the backend port only from the proxy.
+4. Remember that `LGS1920_BACKEND_HOST` takes precedence over
+   `backend.host`. If both are unset, the legacy fallback binds to `0.0.0.0`;
+   this must not be the final public deployment configuration.
+5. Set `LGS1920_PUBLIC_HTTPS=true`, update the exact HTTPS values in
+   `LGS1920_ALLOWED_ORIGINS`, and restart the backend.
+6. Change Studio and Site configuration to the public HTTPS proxy URL. Do not
+   leave a direct backend port in a staging or production browser bundle.
+7. Verify local proxy access, public-port blocking, CORS, protected-route
+   authentication, public count access, and the separate staging and
+   production data and secrets before opening public traffic.
 
 ## Deployment verification
 
