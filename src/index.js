@@ -142,7 +142,7 @@ app.use(swagger({
                         },
                         tags:    [
                             {name: 'file', description: 'File-related endpoints'},
-                            {name: 'count', description: 'Real-time aggregate counters and UTC period history'},
+                            {name: 'count', description: 'Real-time aggregate counters and client-time-zone period history'},
                         ],
                         servers: [
                             {

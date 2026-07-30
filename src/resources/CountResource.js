@@ -19,7 +19,7 @@ const COUNT_PERIOD_PARAMETER = {
     name:        'period',
     in:          'path',
     required:    true,
-    description: 'Period type for the item lookup. For daily, weekly, monthly, and yearly values, the current UTC period is used.',
+    description: 'Period type for the item lookup. For current daily, weekly, monthly, and yearly values, the requested client time zone is used.',
     schema:      {
         type:   'string',
         enum:   ['total', 'daily', 'weekly', 'monthly', 'yearly'],
@@ -31,7 +31,7 @@ const COUNT_DATE_PARAMETER = {
     name:        'date',
     in:          'path',
     required:    true,
-    description: 'UTC calendar date in `dd-mm-yyyy` format.',
+    description: 'Calendar date in `dd-mm-yyyy` format for the requested count time zone.',
     schema:      {
         type:    'string',
         pattern: '^\\d{2}-\\d{2}-\\d{4}$',
@@ -43,7 +43,7 @@ const COUNT_WEEK_PARAMETER = {
     name:        'week',
     in:          'path',
     required:    true,
-    description: 'ISO UTC week in `yyyy-Www` format.',
+    description: 'ISO week in `yyyy-Www` format for the requested count time zone.',
     schema:      {
         type:    'string',
         pattern: '^\\d{4}-W(?:0[1-9]|[1-4]\\d|5[0-3])$',
@@ -55,7 +55,7 @@ const COUNT_MONTH_PARAMETER = {
     name:        'month',
     in:          'path',
     required:    true,
-    description: 'UTC month in `mm-yy` format.',
+    description: 'Calendar month in `mm-yy` format for the requested count time zone.',
     schema:      {
         type:    'string',
         pattern: '^(?:0[1-9]|1[0-2])-\\d{2}$',
@@ -67,11 +67,23 @@ const COUNT_YEAR_PARAMETER = {
     name:        'year',
     in:          'path',
     required:    true,
-    description: 'UTC year in `yyyy` format.',
+    description: 'Calendar year in `yyyy` format for the requested count time zone.',
     schema:      {
         type:    'string',
         pattern: '^\\d{4}$',
         example: '2026',
+    },
+}
+
+const COUNT_TIME_ZONE_PARAMETER = {
+    name:        'timeZone',
+    in:          'query',
+    required:    false,
+    description: 'IANA time zone used for the current calendar period. Defaults to UTC when omitted.',
+    schema:      {
+        type:      'string',
+        maxLength: 64,
+        example:   'America/Montreal',
     },
 }
 
@@ -112,13 +124,13 @@ export class CountResource {
         app.get(`${COUNT_ROUTE}/:item`, this.controller.getItem, this.readDetail('Read a lifetime count item', [COUNT_ITEM_PARAMETER]))
         app.get(`${COUNT_ROUTE}/:item/:period`, this.controller.getItemPeriod, this.readDetail('Read a count item for a period', [COUNT_ITEM_PARAMETER, COUNT_PERIOD_PARAMETER]))
 
-        app.get(`${COUNT_ROUTE}/daily`, this.controller.getDaily, this.readDetail('Read the current UTC daily count'))
+        app.get(`${COUNT_ROUTE}/daily`, this.controller.getDaily, this.readDetail('Read the current client-time-zone daily count'))
         app.get(`${COUNT_ROUTE}/daily/:date`, this.controller.getDailyAt, this.readDetail('Read a daily count', [COUNT_DATE_PARAMETER]))
-        app.get(`${COUNT_ROUTE}/weekly`, this.controller.getWeekly, this.readDetail('Read the current UTC weekly count'))
+        app.get(`${COUNT_ROUTE}/weekly`, this.controller.getWeekly, this.readDetail('Read the current client-time-zone weekly count'))
         app.get(`${COUNT_ROUTE}/weekly/:week`, this.controller.getWeeklyAt, this.readDetail('Read a weekly count', [COUNT_WEEK_PARAMETER]))
-        app.get(`${COUNT_ROUTE}/monthly`, this.controller.getMonthly, this.readDetail('Read the current UTC monthly count'))
+        app.get(`${COUNT_ROUTE}/monthly`, this.controller.getMonthly, this.readDetail('Read the current client-time-zone monthly count'))
         app.get(`${COUNT_ROUTE}/monthly/:month`, this.controller.getMonthlyAt, this.readDetail('Read a monthly count', [COUNT_MONTH_PARAMETER]))
-        app.get(`${COUNT_ROUTE}/yearly`, this.controller.getYearly, this.readDetail('Read the current UTC yearly count'))
+        app.get(`${COUNT_ROUTE}/yearly`, this.controller.getYearly, this.readDetail('Read the current client-time-zone yearly count'))
         app.get(`${COUNT_ROUTE}/yearly/:year`, this.controller.getYearlyAt, this.readDetail('Read a yearly count', [COUNT_YEAR_PARAMETER]))
     }
 
@@ -132,6 +144,17 @@ export class CountResource {
         detail: {
             tags:        ['count'],
             description,
+            body:        {
+                type:       'object',
+                properties: {
+                    timeZone: {
+                        type:      'string',
+                        maxLength: 64,
+                        example:   'America/Montreal',
+                    },
+                },
+                additionalProperties: false,
+            },
             produces:    ['application/json'],
             responses:   {
                 200: {description: 'Count event accepted'},
@@ -151,7 +174,7 @@ export class CountResource {
         detail: {
             tags:        ['count'],
             description,
-            parameters,
+            parameters: [...parameters, COUNT_TIME_ZONE_PARAMETER],
             produces:    ['application/json'],
             responses:   {
                 200: {description: 'Count data returned'},

@@ -21,6 +21,7 @@ production:
 | `LGS1920_INTERNAL_API_TOKEN` | Server-only bearer token for protected internal routes. |
 | `LGS1920_PUBLIC_HTTPS` | Enables HSTS when the public proxy terminates HTTPS. |
 | `LGS1920_MAX_READ_FILE_BYTES` | Upper bound for protected local file reads. |
+| `LGS1920_COUNT_DEFAULT_TIME_ZONE` | Fallback IANA time zone for count events that omit a browser time zone. |
 
 Non-development deployments fail closed for protected routes when
 `LGS1920_INTERNAL_API_TOKEN` is missing. The token must never be included in
@@ -75,6 +76,11 @@ token outside local development. The file reader accepts only files below the
 configured backend or Studio roots, rejects traversal, rejects remote URLs,
 and enforces a size limit. Changelog file reads also reject traversal and
 non-Markdown file names.
+
+Count event payloads may include a browser-provided IANA `timeZone` value. The
+backend validates this value and uses UTC when it is omitted. The value only
+provides calendar context for aggregate periods; it is not used as an identity
+or authentication factor and must not be logged.
 
 The following routes remain browser-facing and do not require the internal
 token:

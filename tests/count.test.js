@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { CountResource } from '../src/resources/CountResource.js'
-import { CountStore, getUtcPeriodKeys } from '../src/services/CountStore.js'
+import { CountStore, getPeriodKeys, getUtcPeriodKeys } from '../src/services/CountStore.js'
 
 const stores = []
 const homes = []
@@ -48,7 +48,13 @@ const createContext = async (initialDate = '2026-07-29T12:00:00.000Z') => {
  * @param {string} [method='GET'] HTTP method.
  * @returns {Promise<Response>} Application response.
  */
-const request = (app, route, method = 'GET') => app.handle(new Request(`http://count.test${route}`, {method}))
+const request = (app, route, method = 'GET', body = undefined) => app.handle(new Request(`http://count.test${route}`, {
+    method,
+    ...(body === undefined ? {} : {
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify(body),
+    }),
+}))
 
 afterEach(async () => {
     await Promise.all(stores.splice(0).map(store => store.close().catch(() => undefined)))
@@ -63,6 +69,14 @@ describe('count API', () => {
             monthly: '01-21',
             yearly:  '2021',
         })
+    })
+
+    test('resolves event periods in the client time zone', () => {
+        const instant = '2026-07-29T22:30:00.000Z'
+
+        expect(getPeriodKeys(instant, 'Europe/Paris').daily).toBe('30-07-2026')
+        expect(getPeriodKeys(instant, 'America/Montreal').daily).toBe('29-07-2026')
+        expect(getPeriodKeys(instant, 'America/Montreal').weekly).toBe('2026-W31')
     })
 
     test('counts every event in all UTC aggregate periods', async () => {
@@ -110,6 +124,45 @@ describe('count API', () => {
         expect(await (await request(app, '/count/daily/29-07-2026')).json()).toEqual({visits: 1, journeys: 0, videos: {draft: 0, hq: 0}})
         expect(await store.getSnapshot()).toEqual(JSON.parse(beforeRead))
         expect(await readFile(store.filePath, 'utf8')).toBe(beforeRead)
+    })
+
+    test('uses the client time zone for event and current-period reads', async () => {
+        const {app, store} = await createContext('2026-07-29T22:30:00.000Z')
+
+        const parisEvent = await request(app, '/count/visit', 'POST', {timeZone: 'Europe/Paris'})
+        const montrealEvent = await request(app, '/count/visit', 'POST', {timeZone: 'America/Montreal'})
+
+        expect(parisEvent.status).toBe(200)
+        expect((await parisEvent.json()).timeZone).toBe('Europe/Paris')
+        expect(montrealEvent.status).toBe(200)
+        expect((await montrealEvent.json()).timeZone).toBe('America/Montreal')
+        expect(await (await request(app, '/count/daily?timeZone=Europe%2FParis')).json()).toEqual({
+            visits:  1,
+            journeys: 0,
+            videos:  {draft: 0, hq: 0},
+        })
+        expect(await (await request(app, '/count/daily?timeZone=America%2FMontreal')).json()).toEqual({
+            visits:  1,
+            journeys: 0,
+            videos:  {draft: 0, hq: 0},
+        })
+        expect((await store.getSnapshot()).total.visits).toBe(2)
+    })
+
+    test('persists the total and previous-day history before a restart', async () => {
+        const {store, home} = await createContext('2026-07-29T12:00:00.000Z')
+        await store.recordEvent('visit', null, 'America/Montreal')
+
+        const reloaded = new CountStore({
+            backendHome: home,
+            clock:      () => new Date('2026-07-30T12:00:00.000Z'),
+            autoPersist: false,
+        })
+        stores.push(reloaded)
+        await reloaded.ready
+
+        expect((await reloaded.getSnapshot()).total.visits).toBe(1)
+        expect((await reloaded.getPeriod('daily', '29-07-2026')).visits).toBe(1)
     })
 
     test('recovers from a corrupted file and initializes valid storage', async () => {
@@ -174,5 +227,13 @@ describe('count API', () => {
         const invalidDate = await request(app, '/count/daily/31-02-2026')
         expect(invalidDate.status).toBe(400)
         expect(await invalidDate.json()).toEqual({success: false, error: 'Invalid count period key'})
+
+        const invalidTimeZone = await request(app, '/count/daily?timeZone=Not%2FA%20TimeZone')
+        expect(invalidTimeZone.status).toBe(400)
+        expect(await invalidTimeZone.json()).toEqual({success: false, error: 'Invalid count time zone'})
+
+        const invalidEvent = await request(app, '/count/visit', 'POST', {timeZone: 'Not/A TimeZone'})
+        expect(invalidEvent.status).toBe(400)
+        expect(await invalidEvent.json()).toEqual({success: false, error: 'Invalid count time zone'})
     })
 })

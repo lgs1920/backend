@@ -1,6 +1,23 @@
 import { CountStore, CountValidationError } from '../services/CountStore.js'
 
 /**
+ * Extract the optional client time zone from an event payload.
+ *
+ * @param {*} body Parsed request body.
+ * @returns {string|null} Client time zone, or null when omitted.
+ * @throws {CountValidationError} If the payload is not a JSON object.
+ */
+const getEventTimeZone = (body) => {
+    if (body === undefined || body === null || body === '') {
+        return null
+    }
+    if (typeof body !== 'object' || Array.isArray(body)) {
+        throw new CountValidationError('Invalid count event payload')
+    }
+    return body.timeZone ?? null
+}
+
+/**
  * Expose count event mutations and read-only aggregate lookups.
  */
 export class CountController {
@@ -30,12 +47,13 @@ export class CountController {
      * Record a count event and return its updated aggregate values.
      *
      * @param {string} eventType Event name.
+     * @param {*} body Parsed request body.
      * @param {object} set Elysia response state.
      * @returns {Promise<object>} Event response.
      */
-    recordEvent = async (eventType, set) => {
+    recordEvent = async (eventType, body, set) => {
         try {
-            return await this.store.recordEvent(eventType)
+            return await this.store.recordEvent(eventType, null, getEventTimeZone(body))
         }
         catch (error) {
             if (error instanceof CountValidationError) {
@@ -51,7 +69,7 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Event response.
      */
-    visit = async ({set}) => this.recordEvent('visit', set)
+    visit = async ({body, set}) => this.recordEvent('visit', body, set)
 
     /**
      * Record a journey event.
@@ -59,7 +77,7 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Event response.
      */
-    journey = async ({set}) => this.recordEvent('journey', set)
+    journey = async ({body, set}) => this.recordEvent('journey', body, set)
 
     /**
      * Record a draft video event.
@@ -67,7 +85,7 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Event response.
      */
-    videoDraft = async ({set}) => this.recordEvent('video/draft', set)
+    videoDraft = async ({body, set}) => this.recordEvent('video/draft', body, set)
 
     /**
      * Record a high-quality video event.
@@ -75,7 +93,7 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Event response.
      */
-    videoHq = async ({set}) => this.recordEvent('video/hq', set)
+    videoHq = async ({body, set}) => this.recordEvent('video/hq', body, set)
 
     /**
      * Read the complete aggregate snapshot.
@@ -90,9 +108,9 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<number|object>} Item value or controlled error.
      */
-    getItem = async ({params, set}) => {
+    getItem = async ({params, query, set}) => {
         try {
-            return await this.store.getItem(params.item)
+            return await this.store.getItem(params.item, 'total', null, query?.timeZone)
         }
         catch (error) {
             return this.handleReadError(set, error)
@@ -100,14 +118,14 @@ export class CountController {
     }
 
     /**
-     * Read one item from a named period, defaulting to the current UTC key.
+     * Read one item from a named period, defaulting to the current client time zone key.
      *
      * @param {object} context Elysia request context.
      * @returns {Promise<number|object>} Item value or controlled error.
      */
-    getItemPeriod = async ({params, set}) => {
+    getItemPeriod = async ({params, query, set}) => {
         try {
-            return await this.store.getItem(params.item, params.period)
+            return await this.store.getItem(params.item, params.period, null, query?.timeZone)
         }
         catch (error) {
             return this.handleReadError(set, error)
@@ -115,15 +133,16 @@ export class CountController {
     }
 
     /**
-     * Read a named period row using its current UTC key.
+     * Read a named period row using its current client time zone key.
      *
      * @param {string} period Period map name.
+     * @param {object} query Parsed query parameters.
      * @param {object} set Elysia response state.
      * @returns {Promise<object>} Period row or controlled error.
      */
-    readCurrentPeriod = async (period, set) => {
+    readCurrentPeriod = async (period, query, set) => {
         try {
-            return await this.store.getPeriod(period)
+            return await this.store.getPeriod(period, null, query?.timeZone)
         }
         catch (error) {
             return this.handleReadError(set, error)
@@ -135,12 +154,13 @@ export class CountController {
      *
      * @param {string} period Period map name.
      * @param {string} key Explicit period key.
+     * @param {object} query Parsed query parameters.
      * @param {object} set Elysia response state.
      * @returns {Promise<object>} Period row or controlled error.
      */
-    readPeriod = async (period, key, set) => {
+    readPeriod = async (period, key, query, set) => {
         try {
-            return await this.store.getPeriod(period, key)
+            return await this.store.getPeriod(period, key, query?.timeZone)
         }
         catch (error) {
             return this.handleReadError(set, error)
@@ -167,7 +187,7 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Daily row.
      */
-    getDaily = async ({set}) => this.readCurrentPeriod('daily', set)
+    getDaily = async ({query, set}) => this.readCurrentPeriod('daily', query, set)
 
     /**
      * Read a historical daily aggregate row.
@@ -175,7 +195,7 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Daily row.
      */
-    getDailyAt = async ({params, set}) => this.readPeriod('daily', params.date, set)
+    getDailyAt = async ({params, query, set}) => this.readPeriod('daily', params.date, query, set)
 
     /**
      * Read the current weekly aggregate row.
@@ -183,7 +203,7 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Weekly row.
      */
-    getWeekly = async ({set}) => this.readCurrentPeriod('weekly', set)
+    getWeekly = async ({query, set}) => this.readCurrentPeriod('weekly', query, set)
 
     /**
      * Read a historical weekly aggregate row.
@@ -191,7 +211,7 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Weekly row.
      */
-    getWeeklyAt = async ({params, set}) => this.readPeriod('weekly', params.week, set)
+    getWeeklyAt = async ({params, query, set}) => this.readPeriod('weekly', params.week, query, set)
 
     /**
      * Read the current monthly aggregate row.
@@ -199,7 +219,7 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Monthly row.
      */
-    getMonthly = async ({set}) => this.readCurrentPeriod('monthly', set)
+    getMonthly = async ({query, set}) => this.readCurrentPeriod('monthly', query, set)
 
     /**
      * Read a historical monthly aggregate row.
@@ -207,7 +227,7 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Monthly row.
      */
-    getMonthlyAt = async ({params, set}) => this.readPeriod('monthly', params.month, set)
+    getMonthlyAt = async ({params, query, set}) => this.readPeriod('monthly', params.month, query, set)
 
     /**
      * Read the current yearly aggregate row.
@@ -215,7 +235,7 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Yearly row.
      */
-    getYearly = async ({set}) => this.readCurrentPeriod('yearly', set)
+    getYearly = async ({query, set}) => this.readCurrentPeriod('yearly', query, set)
 
     /**
      * Read a historical yearly aggregate row.
@@ -223,5 +243,5 @@ export class CountController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Yearly row.
      */
-    getYearlyAt = async ({params, set}) => this.readPeriod('yearly', params.year, set)
+    getYearlyAt = async ({params, query, set}) => this.readPeriod('yearly', params.year, query, set)
 }

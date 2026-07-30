@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
+import { DateTime } from 'luxon'
 
 export const COUNT_SCHEMA_VERSION = 1
 export const COUNT_DATA_PATH = path.join('data', 'count.json')
 export const COUNT_PERIODS = ['total', 'daily', 'weekly', 'monthly', 'yearly']
 export const COUNT_ITEMS = ['total', 'visits', 'journeys', 'videos']
+export const DEFAULT_COUNT_TIME_ZONE = 'UTC'
 
 const DAY_MS = 24 * 60 * 60 * 1000
+const MAX_TIME_ZONE_LENGTH = 64
 const PERIOD_MAPS = ['daily', 'weekly', 'monthly', 'yearly']
 const EVENTS = {
     visit:  {item: 'visits'},
@@ -78,6 +81,42 @@ export const createEmptySnapshot = (updatedAt = null) => ({
 const cloneValue = (value) => structuredClone(value)
 
 /**
+ * Normalize and validate an IANA time zone identifier.
+ *
+ * @param {*} value Candidate time zone identifier.
+ * @param {string} [fallback=DEFAULT_COUNT_TIME_ZONE] Fallback when no value is supplied.
+ * @returns {string} Validated time zone identifier.
+ * @throws {CountValidationError} If the identifier is invalid or too long.
+ */
+export const normalizeCountTimeZone = (value, fallback = DEFAULT_COUNT_TIME_ZONE) => {
+    const candidate = value === undefined || value === null ? fallback : value
+    if (typeof candidate !== 'string') {
+        throw new CountValidationError('Invalid count time zone')
+    }
+
+    const timeZone = candidate.trim()
+    if (!timeZone || timeZone.length > MAX_TIME_ZONE_LENGTH) {
+        throw new CountValidationError('Invalid count time zone')
+    }
+
+    try {
+        const resolvedTimeZone = new Intl.DateTimeFormat('en-US', {timeZone}).resolvedOptions().timeZone
+        if (!resolvedTimeZone) {
+            throw new Error('Invalid time zone')
+        }
+        const dateTime = DateTime.now().setZone(timeZone)
+        if (!dateTime.isValid) {
+            throw new Error('Invalid time zone')
+        }
+    }
+    catch {
+        throw new CountValidationError('Invalid count time zone')
+    }
+
+    return timeZone
+}
+
+/**
  * Convert an input value to a valid Date without changing its timezone semantics.
  *
  * @param {Date|string|number} value Date-like input.
@@ -87,7 +126,7 @@ const cloneValue = (value) => structuredClone(value)
 const toDate = (value) => {
     const date = value instanceof Date ? new Date(value.getTime()) : new Date(value)
     if (!Number.isFinite(date.getTime())) {
-        throw new CountValidationError('Invalid UTC date')
+        throw new CountValidationError('Invalid count event date')
     }
     return date
 }
@@ -102,7 +141,7 @@ const toDate = (value) => {
 const pad = (value, length) => `${value}`.padStart(length, '0')
 
 /**
- * Calculate the ISO week year and week number for a UTC date.
+ * Calculate the ISO week year and week number for a calendar date.
  *
  * @param {Date} date Valid date.
  * @returns {{year: number, week: number}} ISO week components.
@@ -132,22 +171,34 @@ const readCounterNumber = (candidate) => {
 }
 
 /**
- * Resolve all requested UTC period keys for a date.
+ * Resolve all requested period keys for a date in a selected time zone.
  *
  * @param {Date|string|number} value Date-like input.
- * @returns {{daily: string, weekly: string, monthly: string, yearly: string}} UTC keys.
+ * @param {string} [timeZone=DEFAULT_COUNT_TIME_ZONE] IANA time zone used for the calendar period.
+ * @returns {{daily: string, weekly: string, monthly: string, yearly: string}} Period keys.
  */
-export const getUtcPeriodKeys = (value) => {
+export const getPeriodKeys = (value, timeZone = DEFAULT_COUNT_TIME_ZONE) => {
     const date = toDate(value)
-    const isoWeek = getIsoWeek(date)
+    const zone = normalizeCountTimeZone(timeZone)
+    const zonedDate = DateTime.fromJSDate(date).setZone(zone)
+    const calendarDate = new Date(Date.UTC(zonedDate.year, zonedDate.month - 1, zonedDate.day))
+    const isoWeek = getIsoWeek(calendarDate)
 
     return {
-        daily:   `${pad(date.getUTCDate(), 2)}-${pad(date.getUTCMonth() + 1, 2)}-${date.getUTCFullYear()}`,
+        daily:   `${pad(zonedDate.day, 2)}-${pad(zonedDate.month, 2)}-${zonedDate.year}`,
         weekly:  `${isoWeek.year}-W${pad(isoWeek.week, 2)}`,
-        monthly: `${pad(date.getUTCMonth() + 1, 2)}-${pad(date.getUTCFullYear() % 100, 2)}`,
-        yearly:  `${date.getUTCFullYear()}`,
+        monthly: `${pad(zonedDate.month, 2)}-${pad(zonedDate.year % 100, 2)}`,
+        yearly:  `${zonedDate.year}`,
     }
 }
+
+/**
+ * Resolve period keys using UTC for backwards-compatible callers.
+ *
+ * @param {Date|string|number} value Date-like input.
+ * @returns {{daily: string, weekly: string, monthly: string, yearly: string}} UTC period keys.
+ */
+export const getUtcPeriodKeys = (value) => getPeriodKeys(value, 'UTC')
 
 /**
  * Validate a persisted counter value and normalize omitted counters to zero.
@@ -304,9 +355,10 @@ export class CountStore {
      * @param {object} options Store configuration.
      * @param {string} [options.backendHome] Backend home directory.
      * @param {string} [options.filePath] Explicit count file path.
-     * @param {() => Date} [options.clock] UTC clock used for period resolution.
+     * @param {() => Date} [options.clock] Clock used for period resolution.
      * @param {boolean} [options.autoPersist=true] Schedule daily persistence.
      * @param {boolean} [options.registerShutdownHandlers=false] Persist on SIGINT/SIGTERM.
+     * @param {string} [options.timeZone] Default IANA time zone for events without a client time zone.
      */
     constructor({
                     backendHome = process.env.LGS1920_BACKEND_HOME || process.cwd(),
@@ -314,11 +366,13 @@ export class CountStore {
                     clock = () => new Date(),
                     autoPersist = true,
                     registerShutdownHandlers = false,
+                    timeZone = process.env.LGS1920_COUNT_DEFAULT_TIME_ZONE || DEFAULT_COUNT_TIME_ZONE,
                 } = {}) {
         this.backendHome = path.resolve(backendHome)
         this.filePath = path.resolve(filePath ?? path.join(this.backendHome, COUNT_DATA_PATH))
         this.dataDirectory = path.dirname(this.filePath)
         this.clock = clock
+        this.timeZone = normalizeCountTimeZone(timeZone)
         this.snapshot = createEmptySnapshot()
         this.queueTail = Promise.resolve()
         this.closed = false
@@ -370,13 +424,17 @@ export class CountStore {
     }
 
     /**
-     * Schedule the next daily atomic persistence at the next UTC midnight.
+     * Schedule the next daily atomic persistence at the next configured local midnight.
      *
      * @returns {void}
      */
     scheduleDailyPersistence = () => {
         const now = toDate(this.clock())
-        const nextMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+        const nextMidnight = DateTime.fromJSDate(now)
+            .setZone(this.timeZone)
+            .plus({days: 1})
+            .startOf('day')
+            .toJSDate()
         const delay = Math.max(nextMidnight.getTime() - now.getTime(), 1)
 
         this.persistenceTimer = setTimeout(async () => {
@@ -424,13 +482,14 @@ export class CountStore {
     })
 
     /**
-     * Record one accepted event in every required aggregate period.
+     * Record one accepted event in every required aggregate period and persist it.
      *
      * @param {'visit'|'journey'|'video/draft'|'video/hq'} eventType Event name.
      * @param {Date|string|number} [at] Optional event timestamp for deterministic callers.
+     * @param {string|null} [timeZone] Client time zone used for period resolution.
      * @returns {Promise<object>} Updated aggregate values.
      */
-    recordEvent = (eventType, at = null) => {
+    recordEvent = (eventType, at = null, timeZone = null) => {
         const event = EVENTS[eventType]
         if (!event) {
             throw new CountValidationError('Unsupported count event')
@@ -439,28 +498,40 @@ export class CountStore {
             throw new Error('Count store is closed')
         }
 
+        const eventTimeZone = normalizeCountTimeZone(timeZone, this.timeZone)
+
         return this.enqueue(async () => {
-            const eventDate = toDate(at ?? this.clock())
-            const keys = getUtcPeriodKeys(eventDate)
-            const periodRows = {total: this.snapshot.total}
+            const previousSnapshot = cloneValue(this.snapshot)
 
-            for (const period of PERIOD_MAPS) {
-                const key = keys[period]
-                this.snapshot[period][key] ??= createEmptyCounter()
-                periodRows[period] = this.snapshot[period][key]
+            try {
+                const eventDate = toDate(at ?? this.clock())
+                const keys = getPeriodKeys(eventDate, eventTimeZone)
+                const periodRows = {total: this.snapshot.total}
+
+                for (const period of PERIOD_MAPS) {
+                    const key = keys[period]
+                    this.snapshot[period][key] ??= createEmptyCounter()
+                    periodRows[period] = this.snapshot[period][key]
+                }
+
+                for (const row of Object.values(periodRows)) {
+                    incrementCounter(row, event)
+                }
+
+                this.snapshot.updatedAt = eventDate.toISOString()
+                await this.writeSnapshot()
+
+                return {
+                    success:   true,
+                    event:     eventType,
+                    timeZone:  eventTimeZone,
+                    updatedAt: this.snapshot.updatedAt,
+                    counts:    cloneValue(periodRows),
+                }
             }
-
-            for (const row of Object.values(periodRows)) {
-                incrementCounter(row, event)
-            }
-
-            this.snapshot.updatedAt = eventDate.toISOString()
-
-            return {
-                success:   true,
-                event:     eventType,
-                updatedAt: this.snapshot.updatedAt,
-                counts:    cloneValue(periodRows),
+            catch (error) {
+                this.snapshot = previousSnapshot
+                throw error
             }
         })
     }
@@ -480,12 +551,14 @@ export class CountStore {
      *
      * @param {'total'|'daily'|'weekly'|'monthly'|'yearly'} period Period name.
      * @param {string|null} key Explicit period key.
+     * @param {string|null} [timeZone] Time zone used when resolving the current period.
      * @returns {string} Stored lookup key.
      */
-    resolvePeriodKey = (period, key = null) => {
+    resolvePeriodKey = (period, key = null, timeZone = null) => {
         if (!COUNT_PERIODS.includes(period)) {
             throw new CountValidationError('Unsupported count period')
         }
+        const resolvedTimeZone = normalizeCountTimeZone(timeZone, this.timeZone)
         if (period === 'total') {
             if (key && key !== 'total') {
                 throw new CountValidationError('Invalid total period key')
@@ -493,7 +566,7 @@ export class CountStore {
             return 'total'
         }
 
-        const resolvedKey = key ?? getUtcPeriodKeys(this.clock())[period]
+        const resolvedKey = key ?? getPeriodKeys(this.clock(), resolvedTimeZone)[period]
         if (!isPeriodKey(period, resolvedKey)) {
             throw new CountValidationError('Invalid count period key')
         }
@@ -505,11 +578,12 @@ export class CountStore {
      *
      * @param {'total'|'daily'|'weekly'|'monthly'|'yearly'} period Period name.
      * @param {string|null} [key] Explicit period key.
+     * @param {string|null} [timeZone] Time zone used when resolving the current period.
      * @returns {Promise<object>} Stored row or zero counters.
      */
-    getPeriod = async (period, key = null) => {
+    getPeriod = async (period, key = null, timeZone = null) => {
         await this.ready
-        const resolvedKey = this.resolvePeriodKey(period, key)
+        const resolvedKey = this.resolvePeriodKey(period, key, timeZone)
         const row = period === 'total' ? this.snapshot.total : this.snapshot[period][resolvedKey]
         return cloneValue(row ?? createEmptyCounter())
     }
@@ -520,13 +594,14 @@ export class CountStore {
      * @param {'total'|'visits'|'journeys'|'videos'} item Item name.
      * @param {'total'|'daily'|'weekly'|'monthly'|'yearly'} [period='total'] Period name.
      * @param {string|null} [key] Explicit period key.
+     * @param {string|null} [timeZone] Time zone used when resolving the current period.
      * @returns {Promise<number|object>} Item value.
      */
-    getItem = async (item, period = 'total', key = null) => {
+    getItem = async (item, period = 'total', key = null, timeZone = null) => {
         if (!COUNT_ITEMS.includes(item)) {
             throw new CountValidationError('Unsupported count item')
         }
-        const row = await this.getPeriod(period, key)
+        const row = await this.getPeriod(period, key, timeZone)
         return item === 'total' ? row : item === 'videos' ? row.videos : row[item]
     }
 

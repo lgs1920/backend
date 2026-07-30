@@ -2,7 +2,7 @@
 
 ## Status
 
-Approved direction pending implementation.
+Implemented in the aggregate count API.
 
 ## Scope
 
@@ -12,7 +12,7 @@ This document defines the storage and API direction for [backend#18](https://git
 
 Use one compact JSON flat file as the backend persistence store.
 
-The service keeps the current aggregate counters in memory and updates them in real time. It also keeps historical aggregate rows for every day, week, month, and year. The file is persisted once per day through an atomic replacement.
+The service keeps the current aggregate counters in memory and updates them in real time. It also keeps historical aggregate rows for every day, week, month, and year. Each accepted mutation is persisted through an atomic replacement so a process restart cannot discard the previous day's events or the lifetime total. A daily persistence task remains as a durability safety net.
 
 The file stores aggregate counters only. It never stores individual events, IP addresses, cookies, tokens, hashes, or visitor identities.
 
@@ -42,16 +42,27 @@ POST /count/video/draft
 POST /count/video/hq
 ```
 
+Event clients may send their browser time zone as a JSON body:
+
+```json
+{"timeZone":"America/Montreal"}
+```
+
+The value must be a valid IANA time zone identifier. The body is optional for
+backwards compatibility; omitted values use the configured UTC fallback.
+
 Each POST request performs the following work in the mutation queue:
 
-1. resolve the current UTC day, week, month, and year keys
-2. create missing aggregate rows
-3. increment the lifetime `total` row
-4. increment the current `daily` row
-5. increment the current `weekly` row
-6. increment the current `monthly` row
-7. increment the current `yearly` row
-8. return the updated counters
+1. validate the optional client IANA time zone, falling back to UTC when omitted
+2. resolve the event's local day, week, month, and year keys
+3. create missing aggregate rows
+4. increment the lifetime `total` row
+5. increment the event's `daily` row
+6. increment the event's `weekly` row
+7. increment the event's `monthly` row
+8. increment the event's `yearly` row
+9. persist the complete snapshot
+10. return the updated counters and the resolved time zone
 
 The POST request is the only place where period rollover and counter updates occur.
 
@@ -73,7 +84,7 @@ GET /count/yearly
 GET /count/yearly/<yyyy>
 ```
 
-When a date, month, year, or week parameter is omitted, the current UTC period is used.
+When a date, month, year, or week parameter is omitted, the current period in the optional `timeZone` query parameter is used. The query parameter must be a valid IANA time zone identifier and defaults to UTC.
 
 Supported items are:
 
@@ -170,27 +181,29 @@ The current period is identified by its map key. No separate event history is re
 
 ## Persistence and real-time behavior
 
-At startup, the backend loads and validates the JSON file into memory. POST requests mutate the in-memory snapshot immediately. GET requests return the current in-memory snapshot without recomputing it.
+At startup, the backend loads and validates the JSON file into memory. POST requests mutate and persist the snapshot immediately. GET requests return the current in-memory snapshot without recomputing it. A daily persistence task and controlled shutdown save remain as safety nets.
 
 A daily persistence task writes the complete snapshot to a temporary file in the same directory and renames it over the target file. Controlled shutdown should trigger an additional save when possible.
 
 Atomic rename prevents a partially written JSON file. The in-process FIFO queue prevents lost updates between concurrent POST requests.
 
-Because the file is saved once per day, a process crash can lose events accepted after the last save. This is the explicit durability trade-off for the small file and low write frequency.
+Each event write rewrites the complete file. This provides stronger durability at the cost of one atomic file replacement per accepted event. The daily task remains useful after operational interruptions.
 
 Missing files must be initialized with empty aggregate maps. Invalid files must be rejected safely and replaced with a valid zeroed snapshot or a last-known-good backup.
 
 ## Period semantics
 
-All period keys use UTC calendar periods:
+Period keys use the calendar represented by the event or read request's IANA time zone. Events and reads without a time zone use UTC:
 
 | Period | Key | Meaning |
 |---|---|---|
 | `total` | `total` | Lifetime event aggregate |
-| `daily` | `dd-mm-yyyy` | One UTC calendar day |
-| `weekly` | `yyyy-Www` | One UTC calendar week |
-| `monthly` | `mm-yy` | One UTC calendar month |
-| `yearly` | `yyyy` | One UTC calendar year |
+| `daily` | `dd-mm-yyyy` | One calendar day in the selected time zone |
+| `weekly` | `yyyy-Www` | One ISO calendar week in the selected time zone |
+| `monthly` | `mm-yy` | One calendar month in the selected time zone |
+| `yearly` | `yyyy` | One calendar year in the selected time zone |
+
+Browser clients should send the IANA time zone returned by `Intl.DateTimeFormat().resolvedOptions().timeZone` in the POST JSON body and as the `timeZone` query parameter when reading current periods. The time zone is calendar context only; no visitor identity is stored.
 
 Period rows are created and incremented by POST requests. GET requests never create missing rows or reset counters.
 
@@ -255,7 +268,7 @@ Minimum coverage:
 - default current-period lookups
 - repeated events from the same user are counted independently
 - GET requests do not mutate or recalculate data
-- daily persistence
+- persistence after every accepted event
 - controlled-shutdown persistence
 - atomic replacement behavior
 - serialized concurrent POST requests
@@ -267,8 +280,8 @@ Approve the flat JSON file for the first release under these conditions:
 
 - one backend writer
 - compact aggregate rows only
-- daily persistence accepted as the durability policy
-- UTC calendar periods
+- persistence after every accepted event
+- client time zones with UTC fallback
 - no unique visitor requirement
 
 Move to SQLite if multi-process deployment, high traffic, or stronger crash durability becomes necessary.
