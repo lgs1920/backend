@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Release Deployment"
+  short_description: "Prepare backend versions and deployments"
+  default_prompt: "Use $lgs-1920-backend-release-deployment to update backend versions, builds, deployment configuration, and release artifacts."

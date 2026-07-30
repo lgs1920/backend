@@ -1,0 +1,4 @@
+interface:
+  display_name: "LGS1920 Backend API"
+  short_description: "Maintain Bun and Elysia API routes"
+  default_prompt: "Use $lgs-1920-backend-api to modify backend routes, controllers, resources, validation, and API contracts safely."
