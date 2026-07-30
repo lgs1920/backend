@@ -65,7 +65,16 @@ This is the canonical source for the LGS1920 backend AI-agent and development ru
 - Never reset, checkout, or discard user changes without explicit authorization.
 - Report the exact commit scope and remaining working-tree changes after a commit.
 
-## 8. Skill selection
+## 8. Issue workflow
+
+- Every open issue in this repository must have a corresponding issue in `lgs1920/studio`.
+- Create the Studio mirror as part of the same workflow when creating a new Backend issue.
+- The Studio mirror must use the same GitHub issue type as the source issue. If the source issue has no type, determine and set its correct type before creating the mirror.
+- Prefix the Studio mirror title with `[Backend]` and apply the lowercase `backend` label.
+- Add reciprocal cross-references between the Backend issue and its Studio mirror.
+- Before creating a mirror, search open and closed Studio issues for an existing reference to the Backend issue and reuse the existing mirror when one exists.
+
+## 9. Skill selection
 
 - Use the `lgs-1920-backend-*` skills for backend files and backend-specific behavior.
 - Use the copied `lgs-1920-studio-*` skills only when the task explicitly crosses into Studio behavior or requires shared product context.
