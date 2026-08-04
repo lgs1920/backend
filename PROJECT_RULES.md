@@ -56,7 +56,24 @@ This is the canonical source for the LGS1920 backend AI-agent and development ru
 - Never deploy, publish, or overwrite an existing versioned distribution without an explicit user request and a scope check.
 - Keep dependency manifests and the Bun lockfile synchronized when dependencies change.
 
-## 7. Git workflow
+## 7. Issue and release workflow
+
+### Cross-repository issue ownership
+
+- The managed repositories are `studio`, `site`, and `backend`. Create an issue in the repository that owns the API, service, or deployment change.
+- Never mirror a `site` or `backend` issue into `studio`. Record cross-repository dependencies with direct links to the owning issue; do not create duplicate issues.
+- During the mirror-removal migration, inventory confirmed `studio` mirrors of `backend` issues, transfer missing information to the owning issue, remove links to the mirror from the original issue and related documentation, and delete only unambiguous mirror issues.
+- Do not delete an issue with independent scope or unclear ownership. Report ambiguous cases for explicit user decision and verify that no active issue links to a deleted mirror.
+
+### Release and changelog workflow
+
+- Backend release notes participate in the shared public changelog maintained in the sibling Studio repository at `../studio/public/assets/changelog/`.
+- Use the filename `YYYYMMDD-<version>.md`, where `<version>` is the exact release version including prerelease identifiers. If the target file does not exist, create it automatically with today's date and the nearest existing changelog's header conventions.
+- Group closed issues and remaining open bugs/features by owning repository (`studio`, `site`, or `backend`). Omit empty repository headings and omit a category heading when it has no entries.
+- Link every issue to its owning repository. Never include mirror issue links or duplicate issue numbers.
+- Do not invent issue numbers, versions, dates, release membership, or user-facing outcomes.
+
+## 8. Git workflow
 
 - Create a commit only when the user explicitly requests one.
 - Use key-based commit prefixes: `feat`, `fix`, `refactor`, `docs`, `style`, `test`, or `chore`.
