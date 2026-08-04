@@ -5,6 +5,7 @@ import {
     getAllowedOrigins,
 } from '../src/utils/BackendSecurity.js'
 import { resolveBackendHost } from '../src/utils/BackendServerConfig.js'
+import { normalizeChangelogExtension } from '../src/utils/ChangelogUtils.js'
 import { resolveSafeChildPath } from '../src/utils/PathSecurity.js'
 
 const originalEnvironment = {...process.env}
@@ -83,6 +84,12 @@ describe('backend security', () => {
         expect(resolveSafeChildPath('/srv/backend', '../secrets.env')).toBeNull()
         expect(resolveSafeChildPath('/srv/backend', '/etc/passwd')).toBeNull()
         expect(resolveSafeChildPath('/srv/backend', 'data\0/count.json')).toBeNull()
+    })
+
+    test('normalizes optional changelog extensions without requiring a query object', () => {
+        expect(normalizeChangelogExtension(undefined)).toBeUndefined()
+        expect(normalizeChangelogExtension('md')).toBe('.md')
+        expect(normalizeChangelogExtension('.md')).toBe('.md')
     })
 
     test('adds security response headers and optional HSTS', () => {
