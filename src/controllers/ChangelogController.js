@@ -20,6 +20,7 @@
 import *   as fspromises from 'node:fs/promises'
 import * as path      from 'node:path'
 import { FileUtils }  from '../utils/FileUtils'
+import { normalizeChangelogExtension } from '../utils/ChangelogUtils.js'
 import { resolveSafeChildPath } from '../utils/PathSecurity.js'
 import { Controller } from './Controller'
 
@@ -32,15 +33,12 @@ export class ChangelogController extends Controller {
      *
      * We assume they are all markdown files
      *
-     * @param context
+     * @param {object} [context={}] Request context.
      * @return {Promise<{last: *, files: *}>}
      */
-    list = async (context) => {
+    list = async (context = {}) => {
         const directory = this.assetDirectoryPath(this.CHANGELOG_DIR)
-        let extension = context.query.extension
-        if (extension && !extension.startsWith('.')) {
-            extension = `.${extension}`;
-        }
+        const extension = normalizeChangelogExtension(context.query?.extension)
 
         let fileList = await fspromises.readdir(directory)
         // Filter the list by extension
