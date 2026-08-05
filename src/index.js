@@ -22,6 +22,7 @@ import version                  from '../version.json'
 import { ChangelogResource }    from './resources/ChangelogResource'
 import { CloudAuthResource }     from './resources/CloudAuthResource.js'
 import { ConvertVideoResource } from './resources/ConvertVideoResource'
+import { ContactResource }       from './resources/ContactResource.js'
 import { CountResource }         from './resources/CountResource.js'
 import { JourneyImportResource } from './resources/JourneyImportResource.js'
 import { PingResource }         from './resources/PingResource'
@@ -147,6 +148,7 @@ app.use(swagger({
                         tags:    [
                             {name: 'file', description: 'File-related endpoints'},
                             {name: 'count', description: 'Real-time aggregate counters and client-time-zone period history'},
+                            {name: 'registration', description: 'Public Studio launch registrations'},
                         ],
                         servers: [
                             {
@@ -175,6 +177,9 @@ new ChangelogResource(app)
 new ConvertVideoResource(app, {beforeHandle: internalApiGuard})
 new CloudAuthResource(app)
 new JourneyImportResource(app)
+new ContactResource(app, {
+    backendHome: configuration.backend.home,
+})
 new CountResource(app, {
     backendHome:              configuration.backend.home,
     registerShutdownHandlers: true,
