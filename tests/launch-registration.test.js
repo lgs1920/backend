@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { LaunchRegistrationResource } from '../src/resources/LaunchRegistrationResource.js'
 import { LaunchRegistrationStore } from '../src/services/LaunchRegistrationStore.js'
+import {ContactRateLimiter} from '../src/utils/ContactRateLimiter.js'
 
 const homes = []
 
@@ -13,7 +14,7 @@ const homes = []
  *
  * @returns {Promise<{app: Elysia, store: LaunchRegistrationStore, home: string}>} Test context.
  */
-const createContext = async () => {
+const createContext = async ({registrationLimit = 100} = {}) => {
     const home = await mkdtemp(path.join(os.tmpdir(), 'lgs1920-launch-registration-'))
     homes.push(home)
     const store = new LaunchRegistrationStore({
@@ -23,7 +24,13 @@ const createContext = async () => {
     await store.ready
 
     const app = new Elysia()
-    new LaunchRegistrationResource(app, {store})
+    new LaunchRegistrationResource(app, {
+        store,
+        rateLimiter: new ContactRateLimiter({
+            registrationLimit,
+            getClientKey: () => 'test-client',
+        }),
+    })
 
     return {app, store, home}
 }
@@ -92,6 +99,48 @@ describe('launch registration API', () => {
         })
         expect(invalidEmail.status).toBe(400)
         expect(await invalidEmail.json()).toEqual({success: false, error: 'Invalid email address'})
+    })
+
+    test('keeps email registration unique after normalization', async () => {
+        const {app, home} = await createContext()
+
+        const first = await request(app, {
+            firstName: 'Ada',
+            lastName:  'Lovelace',
+            email:     'ada@example.com',
+            consent:   true,
+        })
+        const duplicate = await request(app, {
+            firstName: 'Augusta',
+            lastName:  'King',
+            email:     ' ADA@EXAMPLE.COM ',
+            consent:   true,
+        })
+
+        expect(first.status).toBe(200)
+        expect(duplicate.status).toBe(200)
+        expect(await duplicate.json()).toEqual({success: true, stored: false})
+
+        const persisted = JSON.parse(await readFile(path.join(home, 'data', 'launch-registrations.json'), 'utf8'))
+        expect(persisted.registrations).toHaveLength(1)
+    })
+
+    test('limits repeated registration requests per client', async () => {
+        const {app} = await createContext({registrationLimit: 2})
+        const payload = index => ({
+            firstName: `First${index}`,
+            lastName:  'Test',
+            email:     `person${index}@example.com`,
+            consent:   true,
+        })
+
+        expect((await request(app, payload(1))).status).toBe(200)
+        expect((await request(app, payload(2))).status).toBe(200)
+
+        const limited = await request(app, payload(3))
+        expect(limited.status).toBe(429)
+        expect(limited.headers.get('Retry-After')).toMatch(/^\d+$/)
+        expect(await limited.json()).toEqual({success: false, error: 'Too many registration requests'})
     })
 
     test('silently accepts honeypot submissions without storing them', async () => {

@@ -117,6 +117,7 @@ export class LaunchRegistrationStore {
         this.filePath = path.resolve(filePath ?? path.join(this.backendHome, LAUNCH_REGISTRATION_DATA_PATH))
         this.clock = clock
         this.registrations = []
+        this.registrationEmails = new Set()
         this.mutationQueue = Promise.resolve()
         this.ready = this.load()
     }
@@ -136,6 +137,9 @@ export class LaunchRegistrationStore {
                 throw new Error('Invalid launch registration file shape')
             }
             this.registrations = persisted.registrations
+            this.registrationEmails = new Set(this.registrations
+                .map(registration => typeof registration?.email === 'string' ? registration.email.trim().toLowerCase() : null)
+                .filter(Boolean))
         }
         catch (error) {
             if (error?.code === 'ENOENT') {
@@ -160,6 +164,10 @@ export class LaunchRegistrationStore {
             }
 
             const registration = normalizeLaunchRegistrationPayload(payload)
+            if (this.registrationEmails.has(registration.email)) {
+                return {success: true, stored: false}
+            }
+
             const consentAt = this.clock().toISOString()
             this.registrations.push({
                 id:             randomUUID(),
@@ -168,6 +176,7 @@ export class LaunchRegistrationStore {
                 consentPurpose:'studio-launch',
                 ...registration,
             })
+            this.registrationEmails.add(registration.email)
             await this.save()
 
             return {success: true, stored: true}

@@ -24,8 +24,11 @@ The public site exposes two separate mutation endpoints:
 ```
 
 The response is either `{ "success": true, "stored": true }` or a public-safe
-validation/storage error. A filled `website` honeypot is accepted as
-`{ "success": true, "stored": false }` without persistence.
+validation/storage error. A filled `website` honeypot, or a normalized email
+address that is already registered, is accepted as
+`{ "success": true, "stored": false }` without creating a duplicate record.
+The endpoint allows 5 registration requests per client per 15 minutes; limited
+requests return HTTP `429` with a `Retry-After` header.
 
 ## Contact message
 

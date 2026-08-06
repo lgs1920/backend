@@ -1,6 +1,7 @@
 const DEFAULT_WINDOW_MS = 15 * 60 * 1000
 const DEFAULT_TOKEN_LIMIT = 10
 const DEFAULT_SEND_LIMIT = 5
+const DEFAULT_REGISTRATION_LIMIT = 5
 const DEFAULT_MAX_ENTRIES = 10_000
 
 /**
@@ -41,7 +42,7 @@ const readPositiveInteger = (value, name, fallback) => {
 }
 
 /**
- * Limit public contact requests per client and endpoint scope.
+ * Limit public contact and launch-registration requests per client and endpoint scope.
  */
 export class ContactRateLimiter {
     /**
@@ -58,6 +59,7 @@ export class ContactRateLimiter {
         windowMs = DEFAULT_WINDOW_MS,
         tokenLimit = DEFAULT_TOKEN_LIMIT,
         sendLimit = DEFAULT_SEND_LIMIT,
+        registrationLimit = DEFAULT_REGISTRATION_LIMIT,
         maxEntries = DEFAULT_MAX_ENTRIES,
         trustProxy = false,
         clock = () => Date.now(),
@@ -66,6 +68,7 @@ export class ContactRateLimiter {
         this.windowMs = readPositiveInteger(windowMs, 'windowMs', DEFAULT_WINDOW_MS)
         this.tokenLimit = readPositiveInteger(tokenLimit, 'tokenLimit', DEFAULT_TOKEN_LIMIT)
         this.sendLimit = readPositiveInteger(sendLimit, 'sendLimit', DEFAULT_SEND_LIMIT)
+        this.registrationLimit = readPositiveInteger(registrationLimit, 'registrationLimit', DEFAULT_REGISTRATION_LIMIT)
         this.maxEntries = readPositiveInteger(maxEntries, 'maxEntries', DEFAULT_MAX_ENTRIES)
         this.trustProxy = trustProxy === true
         this.clock = clock
@@ -98,12 +101,18 @@ export class ContactRateLimiter {
     /**
      * Consume one request from a scoped client bucket.
      *
-     * @param {'token'|'send'} scope Endpoint scope.
+     * @param {'token'|'send'|'registration'} scope Endpoint scope.
      * @param {object} context Elysia request context.
      * @returns {{retryAfterSeconds: number}|null} Rate-limit result, or null when allowed.
      */
     check = (scope, context) => {
-        const limit = scope === 'token' ? this.tokenLimit : scope === 'send' ? this.sendLimit : 0
+        const limit = scope === 'token'
+            ? this.tokenLimit
+            : scope === 'send'
+                ? this.sendLimit
+                : scope === 'registration'
+                    ? this.registrationLimit
+                    : 0
         if (!limit) {
             throw new TypeError('Unknown contact rate-limit scope')
         }
