@@ -1,13 +1,16 @@
-import { ContactStorageError, ContactValidationError } from '../services/ContactStore.js'
+import {
+    LaunchRegistrationStorageError,
+    LaunchRegistrationValidationError,
+} from '../services/LaunchRegistrationStore.js'
 
 /**
  * Expose public launch registration mutations without returning personal data.
  */
-export class ContactController {
+export class LaunchRegistrationController {
     /**
-     * Create a contact controller.
+     * Create a launch registration controller.
      *
-     * @param {import('../services/ContactStore.js').ContactStore} store Contact store used by the handler.
+     * @param {import('../services/LaunchRegistrationStore.js').LaunchRegistrationStore} store Launch registration store used by the handler.
      */
     constructor(store) {
         if (!store) {
@@ -22,17 +25,17 @@ export class ContactController {
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Public-safe response envelope.
      */
-    submit = async ({body, set}) => {
+    register = async ({body, set}) => {
         try {
-            return await this.store.create(body)
+            return await this.store.register(body)
         }
         catch (error) {
-            if (error instanceof ContactValidationError) {
+            if (error instanceof LaunchRegistrationValidationError) {
                 set.status = 400
                 return {success: false, error: error.message}
             }
 
-            if (error instanceof ContactStorageError) {
+            if (error instanceof LaunchRegistrationStorageError) {
                 set.status = 503
                 return {success: false, error: 'Launch registration is temporarily unavailable'}
             }

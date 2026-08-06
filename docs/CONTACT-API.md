@@ -1,23 +1,60 @@
-# Public Studio launch registration API
+# Public launch registration and contact APIs
 
-The public site submits launch registrations to `POST /registration`.
+The public site exposes two separate mutation endpoints:
 
-## Request
+- `POST /launch-registration` stores an explicit Studio launch registration in
+  `data/launch-registrations.json`.
+- `POST /contact` validates a contact request and sends it through the
+  configured SMTP relay. Contact messages are not persisted by the backend.
 
-The JSON body contains:
+## Launch registration
 
-- `firstName`: required string, maximum 80 characters
-- `lastName`: required string, maximum 80 characters
-- `email`: required email address, maximum 254 characters
-- `consent`: required boolean and must be `true`
-- `website`: optional honeypot field that must remain empty
+```json
+{
+  "firstName": "Ada",
+  "lastName": "Lovelace",
+  "email": "ada@example.com",
+  "consent": true,
+  "website": ""
+}
+```
 
-The endpoint returns only an acceptance status. It never returns the submitted personal data.
+The response is either `{ "success": true, "stored": true }` or a public-safe
+validation/storage error. A filled `website` honeypot is accepted as
+`{ "success": true, "stored": false }` without persistence.
 
-## Storage
+## Contact message
 
-Accepted registrations are stored in `data/launch-registrations.json` using the existing backend flat-file persistence pattern. The `data/` directory is ignored by Git and must be backed up and access-restricted by the deployment environment.
+```json
+{
+  "firstName": "Ada",
+  "lastName": "Lovelace",
+  "email": "ada@example.com",
+  "subject": "Studio question",
+  "message": "I would like to know more about Studio.",
+  "consent": true,
+  "website": ""
+}
+```
 
-Each stored record contains an identifier, an ISO timestamp, the first name, last name, email address, consent timestamp, and the fixed `studio-launch` consent purpose. No IP address or browser fingerprint is stored.
+The response is `{ "success": true, "sent": true }` after the SMTP relay
+accepts the message. A filled `website` honeypot is accepted as
+`{ "success": true, "sent": false }` without sending. Missing SMTP
+configuration or a relay failure returns HTTP 503 without exposing provider
+details.
 
-The file is written through a temporary file and atomic rename. In-process mutations are serialized through a FIFO queue so concurrent submissions are not lost.
+Configure the server-side mail relay with:
+
+```dotenv
+LGS1920_SMTP_HOST=smtp.example.org
+LGS1920_SMTP_PORT=587
+LGS1920_SMTP_SECURE=false
+LGS1920_SMTP_USER=...
+LGS1920_SMTP_PASSWORD=...
+LGS1920_CONTACT_RECIPIENT=studio@lgs1920.fr
+LGS1920_CONTACT_FROM=studio@lgs1920.fr
+```
+
+`LGS1920_SMTP_USER` and `LGS1920_SMTP_PASSWORD` may both be omitted when the
+relay is configured without authentication. Never expose these values to the
+browser or commit them to the repository.

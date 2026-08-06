@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
-export const REGISTRATION_DATA_PATH = path.join('data', 'launch-registrations.json')
-export const REGISTRATION_SCHEMA_VERSION = 1
+export const LAUNCH_REGISTRATION_DATA_PATH = path.join('data', 'launch-registrations.json')
+export const LAUNCH_REGISTRATION_SCHEMA_VERSION = 1
 
 const MAX_NAME_LENGTH = 80
 const MAX_EMAIL_LENGTH = 254
@@ -12,31 +12,31 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /**
  * Error raised when a launch registration does not satisfy the public API contract.
  */
-export class ContactValidationError extends Error {
+export class LaunchRegistrationValidationError extends Error {
     /**
-     * Create a contact validation error.
+     * Create a launch registration validation error.
      *
      * @param {string} message Human-readable validation message.
      */
     constructor(message) {
         super(message)
-        this.name = 'ContactValidationError'
+        this.name = 'LaunchRegistrationValidationError'
     }
 }
 
 /**
  * Error raised when launch registration data cannot be safely read or written.
  */
-export class ContactStorageError extends Error {
+export class LaunchRegistrationStorageError extends Error {
     /**
-     * Create a contact storage error.
+     * Create a launch registration storage error.
      *
      * @param {string} message Human-readable storage message.
      * @param {*} [cause] Original storage error.
      */
     constructor(message, cause = undefined) {
         super(message, {cause})
-        this.name = 'ContactStorageError'
+        this.name = 'LaunchRegistrationStorageError'
     }
 }
 
@@ -44,12 +44,12 @@ const isObject = (value) => value !== null && typeof value === 'object' && !Arra
 
 const readName = (value, label) => {
     if (typeof value !== 'string') {
-        throw new ContactValidationError(`Invalid ${label}`)
+        throw new LaunchRegistrationValidationError(`Invalid ${label}`)
     }
 
     const name = value.trim()
     if (!name || name.length > MAX_NAME_LENGTH) {
-        throw new ContactValidationError(`Invalid ${label}`)
+        throw new LaunchRegistrationValidationError(`Invalid ${label}`)
     }
 
     return name
@@ -57,12 +57,12 @@ const readName = (value, label) => {
 
 const readEmail = (value) => {
     if (typeof value !== 'string') {
-        throw new ContactValidationError('Invalid email address')
+        throw new LaunchRegistrationValidationError('Invalid email address')
     }
 
     const email = value.trim().toLowerCase()
     if (email.length > MAX_EMAIL_LENGTH || !EMAIL_PATTERN.test(email)) {
-        throw new ContactValidationError('Invalid email address')
+        throw new LaunchRegistrationValidationError('Invalid email address')
     }
 
     return email
@@ -73,15 +73,15 @@ const readEmail = (value) => {
  *
  * @param {*} payload JSON request body.
  * @returns {{firstName: string, lastName: string, email: string, consent: boolean}} Normalized registration.
- * @throws {ContactValidationError} If the payload is incomplete or invalid.
+ * @throws {LaunchRegistrationValidationError} If the payload is incomplete or invalid.
  */
-export const normalizeContactPayload = (payload) => {
+export const normalizeLaunchRegistrationPayload = (payload) => {
     if (!isObject(payload)) {
-        throw new ContactValidationError('Invalid contact payload')
+        throw new LaunchRegistrationValidationError('Invalid launch registration payload')
     }
 
     if (payload.consent !== true) {
-        throw new ContactValidationError('Consent is required')
+        throw new LaunchRegistrationValidationError('Consent is required')
     }
 
     return {
@@ -99,9 +99,9 @@ const isHoneypotFilled = (payload) => isObject(payload)
 /**
  * Create and persist launch registrations in one process-safe FIFO queue.
  */
-export class ContactStore {
+export class LaunchRegistrationStore {
     /**
-     * Create a contact store.
+     * Create a launch registration store.
      *
      * @param {object} options Store configuration.
      * @param {string} [options.backendHome] Backend home directory.
@@ -114,34 +114,34 @@ export class ContactStore {
                     clock = () => new Date(),
                 } = {}) {
         this.backendHome = path.resolve(backendHome)
-        this.filePath = path.resolve(filePath ?? path.join(this.backendHome, REGISTRATION_DATA_PATH))
+        this.filePath = path.resolve(filePath ?? path.join(this.backendHome, LAUNCH_REGISTRATION_DATA_PATH))
         this.clock = clock
-        this.contacts = []
+        this.registrations = []
         this.mutationQueue = Promise.resolve()
         this.ready = this.load()
     }
 
     /**
-     * Load the existing contact file without exposing its contents through the API.
+     * Load the existing launch registration file without exposing its contents through the API.
      *
      * @returns {Promise<void>} Completion promise.
-     * @throws {ContactStorageError} If an existing file is malformed or unreadable.
+     * @throws {LaunchRegistrationStorageError} If an existing file is malformed or unreadable.
      */
     load = async () => {
         await mkdir(path.dirname(this.filePath), {recursive: true})
 
         try {
             const persisted = JSON.parse(await readFile(this.filePath, 'utf8'))
-            if (!isObject(persisted) || persisted.schemaVersion !== REGISTRATION_SCHEMA_VERSION || !Array.isArray(persisted.registrations)) {
-                throw new Error('Invalid contact file shape')
+            if (!isObject(persisted) || persisted.schemaVersion !== LAUNCH_REGISTRATION_SCHEMA_VERSION || !Array.isArray(persisted.registrations)) {
+                throw new Error('Invalid launch registration file shape')
             }
-            this.contacts = persisted.registrations
+            this.registrations = persisted.registrations
         }
         catch (error) {
             if (error?.code === 'ENOENT') {
                 return
             }
-            throw new ContactStorageError('Unable to read launch registration data', error)
+            throw new LaunchRegistrationStorageError('Unable to read launch registration data', error)
         }
     }
 
@@ -151,7 +151,7 @@ export class ContactStore {
      * @param {*} payload Raw public request body.
      * @returns {Promise<{success: boolean, stored: boolean}>} Public-safe result.
      */
-    create = (payload) => {
+    register = (payload) => {
         const operation = this.mutationQueue.then(async () => {
             await this.ready
 
@@ -159,14 +159,14 @@ export class ContactStore {
                 return {success: true, stored: false}
             }
 
-            const contact = normalizeContactPayload(payload)
+            const registration = normalizeLaunchRegistrationPayload(payload)
             const consentAt = this.clock().toISOString()
-            this.contacts.push({
+            this.registrations.push({
                 id:             randomUUID(),
                 createdAt:      consentAt,
                 consentAt,
                 consentPurpose:'studio-launch',
-                ...contact,
+                ...registration,
             })
             await this.save()
 
@@ -178,16 +178,16 @@ export class ContactStore {
     }
 
     /**
-     * Persist the current contact list through a temporary file and rename.
+     * Persist the current launch registration list through a temporary file and rename.
      *
      * @returns {Promise<void>} Completion promise.
-     * @throws {ContactStorageError} If persistence fails.
+     * @throws {LaunchRegistrationStorageError} If persistence fails.
      */
     save = async () => {
         const temporaryPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`
         const payload = JSON.stringify({
-            schemaVersion: REGISTRATION_SCHEMA_VERSION,
-            registrations: this.contacts,
+            schemaVersion: LAUNCH_REGISTRATION_SCHEMA_VERSION,
+            registrations: this.registrations,
         }, null, 2)
 
         try {
@@ -196,7 +196,7 @@ export class ContactStore {
         }
         catch (error) {
             await rm(temporaryPath, {force: true}).catch(() => undefined)
-            throw new ContactStorageError('Unable to save launch registration data', error)
+            throw new LaunchRegistrationStorageError('Unable to save launch registration data', error)
         }
     }
 }

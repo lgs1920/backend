@@ -3,27 +3,27 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { ContactResource } from '../src/resources/ContactResource.js'
-import { ContactStore } from '../src/services/ContactStore.js'
+import { LaunchRegistrationResource } from '../src/resources/LaunchRegistrationResource.js'
+import { LaunchRegistrationStore } from '../src/services/LaunchRegistrationStore.js'
 
 const homes = []
 
 /**
- * Create an isolated contact application backed by a temporary directory.
+ * Create an isolated launch registration application backed by a temporary directory.
  *
- * @returns {Promise<{app: Elysia, store: ContactStore, home: string}>} Test context.
+ * @returns {Promise<{app: Elysia, store: LaunchRegistrationStore, home: string}>} Test context.
  */
 const createContext = async () => {
-    const home = await mkdtemp(path.join(os.tmpdir(), 'lgs1920-contact-'))
+    const home = await mkdtemp(path.join(os.tmpdir(), 'lgs1920-launch-registration-'))
     homes.push(home)
-    const store = new ContactStore({
+    const store = new LaunchRegistrationStore({
         backendHome: home,
         clock:      () => new Date('2026-08-05T12:00:00.000Z'),
     })
     await store.ready
 
     const app = new Elysia()
-    new ContactResource(app, {store})
+    new LaunchRegistrationResource(app, {store})
 
     return {app, store, home}
 }
@@ -35,7 +35,7 @@ const createContext = async () => {
  * @param {*} body JSON request body.
  * @returns {Promise<Response>} Application response.
  */
-const request = (app, body) => app.handle(new Request('http://registration.test/registration', {
+const request = (app, body) => app.handle(new Request('http://registration.test/launch-registration', {
     method:  'POST',
     headers: {'Content-Type': 'application/json'},
     body:    JSON.stringify(body),

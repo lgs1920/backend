@@ -5,4 +5,4 @@ Backend for LGS1920
 
 - [Backend count API flat-file analysis](docs/BACKEND-COUNT-API-FLAT-FILE-ANALYSIS.md)
 - [Backend security baseline](docs/SECURITY.md)
-- [Public Studio launch registration API](docs/CONTACT-API.md)
+- [Public Studio launch registration and contact APIs](docs/CONTACT-API.md)

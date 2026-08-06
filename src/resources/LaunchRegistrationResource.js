@@ -1,18 +1,18 @@
-import { ContactController } from '../controllers/ContactController.js'
-import { ContactStore }      from '../services/ContactStore.js'
+import { LaunchRegistrationController } from '../controllers/LaunchRegistrationController.js'
+import { LaunchRegistrationStore }      from '../services/LaunchRegistrationStore.js'
 
-export const REGISTRATION_ROUTE = '/registration'
+export const LAUNCH_REGISTRATION_ROUTE = '/launch-registration'
 
 /**
  * Register the public Studio launch registration API on an Elysia application.
  */
-export class ContactResource {
+export class LaunchRegistrationResource {
     /**
-     * Register the contact submission route.
+     * Register the launch registration submission route.
      *
      * @param {object} app Elysia application instance.
      * @param {object} options Resource configuration.
-     * @param {ContactStore} [options.store] Injected store for tests or composition.
+     * @param {LaunchRegistrationStore} [options.store] Injected store for tests or composition.
      * @param {string} [options.backendHome] Backend home used by the default store.
      */
     constructor(app, {store = null, backendHome = undefined} = {}) {
@@ -20,12 +20,12 @@ export class ContactResource {
             throw new Error('app is undefined')
         }
 
-        this.store = store ?? new ContactStore({backendHome})
-        this.controller = new ContactController(this.store)
+        this.store = store ?? new LaunchRegistrationStore({backendHome})
+        this.controller = new LaunchRegistrationController(this.store)
 
-        app.post(REGISTRATION_ROUTE, this.controller.submit, {
+        app.post(LAUNCH_REGISTRATION_ROUTE, this.controller.register, {
             detail: {
-                tags:     ['registration'],
+                tags:     ['launch-registration'],
                 summary:  'Register for the Studio launch',
                 description: 'Store a first name, last name, email address, and launch-contact consent from the public site.',
                 body: {
@@ -43,7 +43,7 @@ export class ContactResource {
                 responses: {
                     200: {description: 'Registration accepted'},
                     400: {description: 'Invalid registration payload'},
-                    503: {description: 'Contact storage unavailable'},
+                    503: {description: 'Launch registration storage unavailable'},
                 },
             },
         })

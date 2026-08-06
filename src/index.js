@@ -22,7 +22,8 @@ import version                  from '../version.json'
 import { ChangelogResource }    from './resources/ChangelogResource'
 import { CloudAuthResource }     from './resources/CloudAuthResource.js'
 import { ConvertVideoResource } from './resources/ConvertVideoResource'
-import { ContactResource }       from './resources/ContactResource.js'
+import { LaunchRegistrationResource } from './resources/LaunchRegistrationResource.js'
+import { ContactMailResource }   from './resources/ContactMailResource.js'
 import { CountResource }         from './resources/CountResource.js'
 import { JourneyImportResource } from './resources/JourneyImportResource.js'
 import { PingResource }         from './resources/PingResource'
@@ -148,7 +149,8 @@ app.use(swagger({
                         tags:    [
                             {name: 'file', description: 'File-related endpoints'},
                             {name: 'count', description: 'Real-time aggregate counters and client-time-zone period history'},
-                            {name: 'registration', description: 'Public Studio launch registrations'},
+                            {name: 'launch-registration', description: 'Public Studio launch registrations'},
+                            {name: 'contact', description: 'Public contact messages sent by email'},
                         ],
                         servers: [
                             {
@@ -177,9 +179,10 @@ new ChangelogResource(app)
 new ConvertVideoResource(app, {beforeHandle: internalApiGuard})
 new CloudAuthResource(app)
 new JourneyImportResource(app)
-new ContactResource(app, {
+new LaunchRegistrationResource(app, {
     backendHome: configuration.backend.home,
 })
+new ContactMailResource(app)
 new CountResource(app, {
     backendHome:              configuration.backend.home,
     registerShutdownHandlers: true,
