@@ -56,7 +56,6 @@ describe('contact email API', () => {
         const mailer = new ContactMailService({
             env: {
                 LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
-                LGS1920_CONTACT_FROM:          'postmaster@lgs1920.fr',
             },
             transporter: {
                 sendMail: async (message) => messages.push(message),
@@ -70,7 +69,10 @@ describe('contact email API', () => {
         expect(await response.json()).toEqual({success: true, sent: true})
         expect(messages).toHaveLength(1)
         expect(messages[0]).toMatchObject({
-            from:    'postmaster@lgs1920.fr',
+            from:    {
+                name:    'ada@example.com',
+                address: 'studio@lgs1920.fr',
+            },
             to:      'studio@lgs1920.fr',
             replyTo: 'ada@example.com',
             subject: '[LGS1920 Contact] Studio question',
@@ -92,7 +94,6 @@ describe('contact email API', () => {
         const app = createApp(new ContactMailService({
             env: {
                 LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
-                LGS1920_CONTACT_FROM:          'postmaster@lgs1920.fr',
             },
             transporter: {
                 sendMail: async () => {
@@ -142,7 +143,6 @@ describe('contact email API', () => {
         const app = createApp(new ContactMailService({
             env: {
                 LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
-                LGS1920_CONTACT_FROM:          'postmaster@lgs1920.fr',
             },
             transporter: {
                 sendMail: async () => {
@@ -163,7 +163,6 @@ describe('contact email API', () => {
         const mailer = new ContactMailService({
             env: {
                 LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
-                LGS1920_CONTACT_FROM:          'postmaster@lgs1920.fr',
             },
             transporter: {
                 sendMail: async (message) => messages.push(message),
@@ -219,7 +218,6 @@ describe('contact email API', () => {
                 LGS1920_SMTP_CONNECTION_TIMEOUT_MS:     '12000',
                 LGS1920_SMTP_GREETING_TIMEOUT_MS:       '8000',
                 LGS1920_SMTP_SOCKET_TIMEOUT_MS:         '25000',
-                LGS1920_CONTACT_FROM:                  'relay@example.org',
                 LGS1920_CONTACT_TARGET_F7A91C:         'studio@lgs1920.fr',
             },
         })
@@ -237,13 +235,32 @@ describe('contact email API', () => {
         })
     })
 
+    test('uses the resolved contact target as the SMTP login', () => {
+        const service = new ContactMailService({
+            env: {
+                LGS1920_SMTP_HOST:             'smtp.example.org',
+                LGS1920_SMTP_PORT:             '465',
+                LGS1920_SMTP_SECURE:           'true',
+                LGS1920_SMTP_USER:             'legacy-relay@example.org',
+                LGS1920_SMTP_PASSWORD:         'test-password',
+                LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
+            },
+        })
+
+        const transport = service.createTransport('studio@lgs1920.fr')
+
+        expect(transport.options.auth).toEqual({
+            user: 'studio@lgs1920.fr',
+            pass: 'test-password',
+        })
+    })
+
     test('rejects insecure implicit-TLS configuration', () => {
         const service = new ContactMailService({
             env: {
                 LGS1920_SMTP_HOST:              'smtp.example.org',
                 LGS1920_SMTP_PORT:              '465',
                 LGS1920_SMTP_SECURE:            'false',
-                LGS1920_CONTACT_FROM:           'relay@example.org',
                 LGS1920_CONTACT_TARGET_F7A91C:  'studio@lgs1920.fr',
             },
         })

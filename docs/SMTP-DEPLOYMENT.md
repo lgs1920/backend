@@ -16,8 +16,8 @@ Use one verified SMTP relay account or credential set per environment:
 
 The relay provider must authorize the sender domain. Configure SPF and DKIM
 records as requested by the provider, and add a DMARC policy appropriate for
-the domain. Keep the `From` address stable; the visitor's address is sent as
-`Reply-To` by the backend.
+the domain. Keep the SMTP `From` address stable; the visitor's address is
+displayed as the sender name and sent as `Reply-To` by the backend.
 
 Installing Postfix, Exim, or another local SMTP server on the backend host is
 not required for this application. A self-hosted mail server is a separate
@@ -33,9 +33,7 @@ commit real values to Git or place them in a generated release archive.
 LGS1920_SMTP_HOST=smtp.webmo.fr
 LGS1920_SMTP_PORT=465
 LGS1920_SMTP_SECURE=true
-LGS1920_SMTP_USER=relay-user
 LGS1920_SMTP_PASSWORD=replace-with-a-secret
-LGS1920_CONTACT_FROM=your-mailbox@example.org
 LGS1920_CONTACT_CSRF_SECRET=at-least-32-random-characters
 LGS1920_CONTACT_TARGET_F7A91C=your-recipient@example.org
 # Optional timeout overrides, in milliseconds.
@@ -50,8 +48,10 @@ sender and target mapping configuration and does not accept a raw recipient
 address from the browser.
 Use `587` with `LGS1920_SMTP_SECURE=false` only for a relay that explicitly
 requires STARTTLS.
-The username and password must either both be present or both be omitted when
-the relay allows unauthenticated delivery from the server IP.
+When `LGS1920_SMTP_PASSWORD` is present, the address resolved from
+`LGS1920_CONTACT_TARGET_*` is used as the SMTP username. `LGS1920_SMTP_USER`
+is retained only as a fallback when no target address is available. Omit both
+credentials when the relay allows unauthenticated delivery from the server IP.
 
 ## Clean server-side installation
 
@@ -76,9 +76,7 @@ administrative session and use shell assignment syntax compatible with
 LGS1920_SMTP_HOST=smtp.webmo.fr
 LGS1920_SMTP_PORT=465
 LGS1920_SMTP_SECURE=true
-LGS1920_SMTP_USER=relay-user
 LGS1920_SMTP_PASSWORD='replace-with-a-secret'
-LGS1920_CONTACT_FROM=your-nuxit-mailbox@example.org
 LGS1920_CONTACT_CSRF_SECRET='at-least-32-random-characters'
 LGS1920_CONTACT_TARGET_F7A91C=your-recipient@example.org
 LGS1920_SMTP_CONNECTION_TIMEOUT_MS=15000
@@ -164,4 +162,4 @@ Expected failure behavior:
 - TLS or connection failure: check the provider's required port and whether
   it expects STARTTLS (`587`/`false`) or implicit TLS (`465`/`true`).
 - Message rejected: verify the sender domain, SPF/DKIM status, and the exact
-  `LGS1920_CONTACT_FROM` address authorized by the provider.
+  `LGS1920_CONTACT_TARGET_*` address authorized by the provider as the sender.

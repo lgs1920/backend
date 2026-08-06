@@ -138,10 +138,10 @@ export class ContactMailService {
     }
 
     /**
-     * Read and validate the configured contact email addresses.
+     * Resolve the contact mailbox selected by the opaque target key.
      *
-     * @returns {{recipient: string, sender: string}} Configured message addresses.
-     * @throws {ContactMailConfigurationError} If an address is missing or invalid.
+     * @returns {{recipient: string, sender: string}} Resolved message addresses.
+     * @throws {ContactMailConfigurationError} If the target mapping is missing.
      */
     getConfiguredAddresses = (targetKey) => {
         const targets = getContactTargetMap(this.env)
@@ -155,23 +155,17 @@ export class ContactMailService {
             throw new ContactMailValidationError('Invalid contact target')
         }
 
-        const sender = typeof this.env.LGS1920_CONTACT_FROM === 'string'
-            ? this.env.LGS1920_CONTACT_FROM.trim()
-            : typeof this.env.LGS1920_SMTP_USER === 'string'
-                ? this.env.LGS1920_SMTP_USER.trim()
-                : ''
-        if (!sender) {
-            throw new ContactMailConfigurationError('Contact sender address is not configured')
-        }
-
-        if (!EMAIL_PATTERN.test(sender)) {
-            throw new ContactMailConfigurationError('Contact sender address is invalid')
-        }
-
-        return {recipient, sender}
+        return {recipient, sender: recipient}
     }
 
-    createTransport = () => {
+    /**
+     * Create an SMTP transport using the resolved contact address as the login.
+     *
+     * @param {string} [targetAddress=''] Resolved address selected by the opaque contact key.
+     * @returns {object} Configured Nodemailer transport.
+     * @throws {ContactMailConfigurationError} If SMTP configuration is invalid.
+     */
+    createTransport = (targetAddress = '') => {
         const host = this.env.LGS1920_SMTP_HOST?.trim()
         if (!host) {
             throw new ContactMailConfigurationError('Contact email delivery is not configured')
@@ -203,8 +197,10 @@ export class ContactMailService {
             socketTimeout:     readSmtpTimeout(this.env.LGS1920_SMTP_SOCKET_TIMEOUT_MS, 'LGS1920_SMTP_SOCKET_TIMEOUT_MS', DEFAULT_SMTP_SOCKET_TIMEOUT_MS),
         }
 
-        const username = this.env.LGS1920_SMTP_USER?.trim()
         const password = this.env.LGS1920_SMTP_PASSWORD
+        const resolvedTargetAddress = typeof targetAddress === 'string' ? targetAddress.trim() : ''
+        const configuredUsername = this.env.LGS1920_SMTP_USER?.trim()
+        const username = password && resolvedTargetAddress ? resolvedTargetAddress : configuredUsername
         if (username || password) {
             if (!username || !password) {
                 throw new ContactMailConfigurationError('SMTP credentials are incomplete')
@@ -228,11 +224,14 @@ export class ContactMailService {
 
         const contact = normalizeContactMessage(payload)
         const {recipient, sender} = this.getConfiguredAddresses(contact.to)
-        const transporter = this.transporter ?? this.createTransport()
+        const transporter = this.transporter ?? this.createTransport(recipient)
 
         try {
             await transporter.sendMail({
-                from:    sender,
+                from:    {
+                    name:    contact.email,
+                    address: sender,
+                },
                 to:      recipient,
                 replyTo: contact.email,
                 subject: `[LGS1920 Contact] ${contact.subject}`,

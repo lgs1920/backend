@@ -64,16 +64,20 @@ Configure the server-side mail relay with:
 LGS1920_SMTP_HOST=smtp.webmo.fr
 LGS1920_SMTP_PORT=465
 LGS1920_SMTP_SECURE=true
-LGS1920_SMTP_USER=...
 LGS1920_SMTP_PASSWORD=...
-LGS1920_CONTACT_FROM=your-nuxit-mailbox@example.org
 LGS1920_CONTACT_CSRF_SECRET=at-least-32-random-characters
 LGS1920_CONTACT_TARGET_F7A91C=your-recipient@example.org
 ```
 
-`LGS1920_SMTP_USER` and `LGS1920_SMTP_PASSWORD` may both be omitted when the
-relay is configured without authentication. Never expose these values to the
-browser or commit them to the repository. `LGS1920_CONTACT_CSRF_SECRET` and
-the `LGS1920_CONTACT_TARGET_*` values are server-only configuration. The
-target key may be included in the frontend request, but it does not reveal the
-resolved recipient address.
+When `LGS1920_SMTP_PASSWORD` is configured, the email resolved from the
+contact target key is used as the SMTP login. `LGS1920_SMTP_USER` remains an
+optional legacy fallback when no resolved target address is passed. Omit both
+credentials when the relay explicitly allows unauthenticated delivery. Never
+expose these values to the browser or commit them to the repository.
+The resolved target address is used as the authenticated SMTP sender and
+recipient. The visitor's email is displayed as the sender name and is also
+sent as `Reply-To`, so mailbox replies go directly to the visitor without
+spoofing the SMTP sender address. `LGS1920_CONTACT_CSRF_SECRET` and the
+`LGS1920_CONTACT_TARGET_*` values are server-only configuration. The target
+key may be included in the frontend request, but it does not reveal the
+resolved address.
