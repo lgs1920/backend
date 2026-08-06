@@ -91,6 +91,15 @@ send an accidental production message.
 The file must not be copied into `releases/<version>`, committed, printed in
 deployment logs, or exposed to browser code.
 
+Keep values containing shell metacharacters quoted because the deployment
+sources this file before starting PM2. For example:
+
+```dotenv
+LGS1920_SMTP_PASSWORD='replace-with-a-secret-containing-&-or-brackets'
+```
+
+The deployment rejects an invalid unquoted assignment before transferring it.
+
 The frontend sends only an opaque target key such as `f7a91c`. The backend
 resolves it through the `LGS1920_CONTACT_TARGET_*` variables. Add another
 target by adding another server-side mapping; do not send its email address in
