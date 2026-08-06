@@ -114,8 +114,6 @@ const isHoneypotFilled = (payload) => isObject(payload)
     && payload.website.trim().length > 0
 
 const buildTextMessage = (contact) => [
-    'New message from the LGS1920 contact form',
-    '',
     `Name: ${contact.firstName} ${contact.lastName}`,
     `Email: ${contact.email}`,
     `Subject: ${contact.subject}`,

@@ -78,6 +78,7 @@ describe('contact email API', () => {
             subject: '[LGS1920 Contact] Studio question',
         })
         expect(messages[0].text).toContain('I would like to know more about Studio.')
+        expect(messages[0].text).not.toContain('New message from the LGS1920 contact form')
     })
 
     test('rejects invalid contact payloads', async () => {
