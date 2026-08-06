@@ -1,10 +1,16 @@
 import nodemailer from 'nodemailer'
+import { getContactTargetMap } from '../utils/ContactRequestSecurity.js'
 
 const MAX_NAME_LENGTH = 80
 const MAX_EMAIL_LENGTH = 254
 const MAX_SUBJECT_LENGTH = 160
 const MAX_MESSAGE_LENGTH = 5000
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const DEFAULT_SMTP_CONNECTION_TIMEOUT_MS = 15_000
+const DEFAULT_SMTP_GREETING_TIMEOUT_MS = 10_000
+const DEFAULT_SMTP_SOCKET_TIMEOUT_MS = 30_000
+const MIN_SMTP_TIMEOUT_MS = 1_000
+const MAX_SMTP_TIMEOUT_MS = 120_000
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
 
@@ -30,6 +36,28 @@ const readEmail = (value) => {
 }
 
 const stripControlCharacters = (value) => value.replace(/[\r\n]+/g, ' ')
+
+/**
+ * Read one bounded SMTP timeout from the server environment.
+ *
+ * @param {*} value Environment value.
+ * @param {string} name Environment variable name.
+ * @param {number} fallback Default timeout in milliseconds.
+ * @returns {number} Validated timeout in milliseconds.
+ * @throws {ContactMailConfigurationError} If the timeout is outside safe bounds.
+ */
+const readSmtpTimeout = (value, name, fallback) => {
+    if (value === undefined || value === '') {
+        return fallback
+    }
+
+    const timeout = Number(value)
+    if (!Number.isSafeInteger(timeout) || timeout < MIN_SMTP_TIMEOUT_MS || timeout > MAX_SMTP_TIMEOUT_MS) {
+        throw new ContactMailConfigurationError(`${name} must be between ${MIN_SMTP_TIMEOUT_MS} and ${MAX_SMTP_TIMEOUT_MS} milliseconds`)
+    }
+
+    return timeout
+}
 
 /** Error raised when a contact message does not satisfy the public API contract. */
 export class ContactMailValidationError extends Error {
@@ -59,7 +87,7 @@ export class ContactMailDeliveryError extends Error {
  * Normalize and validate a public contact message.
  *
  * @param {*} payload Raw request body.
- * @returns {{firstName: string, lastName: string, email: string, subject: string, message: string, consent: true}}
+ * @returns {{to: string, firstName: string, lastName: string, email: string, subject: string, message: string, consent: true}}
  */
 export const normalizeContactMessage = (payload) => {
     if (!isObject(payload)) {
@@ -71,6 +99,7 @@ export const normalizeContactMessage = (payload) => {
     }
 
     return {
+        to:        readText(payload.to, 'contact target', 64),
         firstName: readText(payload.firstName, 'first name', MAX_NAME_LENGTH),
         lastName:  readText(payload.lastName, 'last name', MAX_NAME_LENGTH),
         email:     readEmail(payload.email),
@@ -106,8 +135,40 @@ export class ContactMailService {
     constructor({env = process.env, transporter = null} = {}) {
         this.env = env
         this.transporter = transporter
-        this.recipient = env.LGS1920_CONTACT_RECIPIENT || 'studio@lgs1920.fr'
-        this.sender = env.LGS1920_CONTACT_FROM || this.recipient
+    }
+
+    /**
+     * Read and validate the configured contact email addresses.
+     *
+     * @returns {{recipient: string, sender: string}} Configured message addresses.
+     * @throws {ContactMailConfigurationError} If an address is missing or invalid.
+     */
+    getConfiguredAddresses = (targetKey) => {
+        const targets = getContactTargetMap(this.env)
+        if (Object.keys(targets).length === 0) {
+            throw new ContactMailConfigurationError('Contact target mapping is not configured')
+        }
+
+        const key = typeof targetKey === 'string' ? targetKey.trim().toLowerCase() : ''
+        const recipient = targets[key]
+        if (!recipient) {
+            throw new ContactMailValidationError('Invalid contact target')
+        }
+
+        const sender = typeof this.env.LGS1920_CONTACT_FROM === 'string'
+            ? this.env.LGS1920_CONTACT_FROM.trim()
+            : typeof this.env.LGS1920_SMTP_USER === 'string'
+                ? this.env.LGS1920_SMTP_USER.trim()
+                : ''
+        if (!sender) {
+            throw new ContactMailConfigurationError('Contact sender address is not configured')
+        }
+
+        if (!EMAIL_PATTERN.test(sender)) {
+            throw new ContactMailConfigurationError('Contact sender address is invalid')
+        }
+
+        return {recipient, sender}
     }
 
     createTransport = () => {
@@ -116,15 +177,30 @@ export class ContactMailService {
             throw new ContactMailConfigurationError('Contact email delivery is not configured')
         }
 
-        const port = Number(this.env.LGS1920_SMTP_PORT || 587)
+        const port = Number(this.env.LGS1920_SMTP_PORT || 465)
         if (!Number.isInteger(port) || port < 1 || port > 65535) {
             throw new ContactMailConfigurationError('Invalid SMTP port')
+        }
+
+        const secureValue = this.env.LGS1920_SMTP_SECURE
+        if (secureValue !== undefined && !['true', 'false'].includes(secureValue)) {
+            throw new ContactMailConfigurationError('Invalid SMTP secure mode')
+        }
+
+        const secure = secureValue === undefined ? port === 465 : secureValue === 'true'
+        if (port === 465 && !secure) {
+            throw new ContactMailConfigurationError('SMTP port 465 requires implicit TLS')
         }
 
         const options = {
             host,
             port,
-            secure: this.env.LGS1920_SMTP_SECURE === 'true',
+            secure,
+            requireTLS: !secure,
+            tls: {rejectUnauthorized: true},
+            connectionTimeout: readSmtpTimeout(this.env.LGS1920_SMTP_CONNECTION_TIMEOUT_MS, 'LGS1920_SMTP_CONNECTION_TIMEOUT_MS', DEFAULT_SMTP_CONNECTION_TIMEOUT_MS),
+            greetingTimeout:   readSmtpTimeout(this.env.LGS1920_SMTP_GREETING_TIMEOUT_MS, 'LGS1920_SMTP_GREETING_TIMEOUT_MS', DEFAULT_SMTP_GREETING_TIMEOUT_MS),
+            socketTimeout:     readSmtpTimeout(this.env.LGS1920_SMTP_SOCKET_TIMEOUT_MS, 'LGS1920_SMTP_SOCKET_TIMEOUT_MS', DEFAULT_SMTP_SOCKET_TIMEOUT_MS),
         }
 
         const username = this.env.LGS1920_SMTP_USER?.trim()
@@ -151,12 +227,13 @@ export class ContactMailService {
         }
 
         const contact = normalizeContactMessage(payload)
+        const {recipient, sender} = this.getConfiguredAddresses(contact.to)
         const transporter = this.transporter ?? this.createTransport()
 
         try {
             await transporter.sendMail({
-                from:    this.sender,
-                to:      this.recipient,
+                from:    sender,
+                to:      recipient,
                 replyTo: contact.email,
                 subject: `[LGS1920 Contact] ${contact.subject}`,
                 text:    buildTextMessage(contact),

@@ -150,6 +150,13 @@ The reverse proxy should also provide request size limits, timeouts, and rate
 limits. Application endpoints must still validate input and avoid exposing
 upstream errors, local paths, or credentials.
 
+The public contact API also applies an in-process rate limit of 10 token
+requests and 5 message sends per client per 15 minutes. This is a safety net,
+not a replacement for proxy-level rate limiting. Set
+`LGS1920_TRUST_PROXY=true` only when the backend port is private and every
+request comes through the trusted reverse proxy; otherwise the application
+uses the direct socket address and ignores `X-Forwarded-For`.
+
 ### Activation when the reverse proxy is introduced
 
 Complete the following transition before making the backend publicly

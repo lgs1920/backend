@@ -182,7 +182,9 @@ new JourneyImportResource(app)
 new LaunchRegistrationResource(app, {
     backendHome: configuration.backend.home,
 })
-new ContactMailResource(app)
+new ContactMailResource(app, {
+    allowedOrigins,
+})
 new CountResource(app, {
     backendHome:              configuration.backend.home,
     registerShutdownHandlers: true,
