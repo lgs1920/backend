@@ -119,6 +119,21 @@ const isHotStartup = () => {
 const deploymentPlatform = configuration.platform ?? platforms.PROD
 const isDevelopment = deploymentPlatform === platforms.DEV || process.env.NODE_ENV === 'development'
 const allowedOrigins = getAllowedOrigins(deploymentPlatform)
+const publicSiteUrl = process.env.LGS1920_SITE_PUBLIC_URL
+    ?? process.env.LGS1920_STUDIO_PUBLIC_URL
+    ?? (isDevelopment ? 'http://localhost:8080' : `${configuration.site.protocol}://${configuration.site.domain}`)
+const backendDefaultPort = Number(configuration.backend.port)
+const backendPortSuffix = (configuration.backend.protocol === 'https' && backendDefaultPort === 443)
+    || (configuration.backend.protocol === 'http' && backendDefaultPort === 80)
+    ? ''
+    : `:${backendDefaultPort}`
+const backendPublicUrl = process.env.LGS1920_BACKEND_PUBLIC_URL
+    ?? `${configuration.backend.protocol}://${configuration.backend.domain}${backendPortSuffix}`
+const mailer = new ContactMailService({
+    backendPublicUrl,
+    diagnosticLogging: process.env.LGS1920_MAIL_DIAGNOSTIC_LOG === 'true',
+    publicSiteUrl,
+})
 const publicHttps = process.env.LGS1920_PUBLIC_HTTPS === 'true'
 const internalApiGuard = createInternalApiGuard({allowWithoutToken: isDevelopment})
 const backendHost = resolveBackendHost({
@@ -183,10 +198,11 @@ new JourneyImportResource(app)
 new LaunchRegistrationResource(app, {
     allowedOrigins,
     backendHome: configuration.backend.home,
-    mailer: process.env.LGS1920_LAUNCH_REGISTRATION_EMAIL_ENABLED === 'true' ? new ContactMailService() : null,
+    mailer: process.env.LGS1920_LAUNCH_REGISTRATION_EMAIL_ENABLED === 'true' ? mailer : null,
 })
 new ContactMailResource(app, {
     allowedOrigins,
+    mailer,
 })
 new CountResource(app, {
     backendHome:              configuration.backend.home,

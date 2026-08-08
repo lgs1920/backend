@@ -1,14 +1,16 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {normalizeFormMailMetadata} from '../utils/FormMailContract.js'
 
 export const LAUNCH_REGISTRATION_DATA_PATH = path.join('data', 'launch-registrations.json')
-export const LAUNCH_REGISTRATION_SCHEMA_VERSION = 1
+export const LAUNCH_REGISTRATION_SCHEMA_VERSION = 2
 
 const MAX_NAME_LENGTH = 80
 const MAX_EMAIL_LENGTH = 254
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const CANCELLATION_TOKEN_BYTES = 32
+const CANCELLATION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{40,128}$/
 
 /**
  * Error raised when a launch registration does not satisfy the public API contract.
@@ -117,6 +119,27 @@ const isHoneypotFilled = (payload) => isObject(payload)
     && typeof payload.website === 'string'
     && payload.website.trim().length > 0
 
+const createCancellationToken = () => randomBytes(CANCELLATION_TOKEN_BYTES).toString('base64url')
+
+const hashCancellationToken = (token) => createHash('sha256').update(token).digest()
+
+const cancellationTokensMatch = (storedHash, token) => {
+    if (typeof storedHash !== 'string' || !CANCELLATION_TOKEN_PATTERN.test(token)) {
+        return false
+    }
+
+    let storedBytes
+    try {
+        storedBytes = Buffer.from(storedHash, 'hex')
+    }
+    catch {
+        return false
+    }
+
+    const receivedBytes = hashCancellationToken(token)
+    return storedBytes.length === receivedBytes.length && timingSafeEqual(storedBytes, receivedBytes)
+}
+
 /**
  * Create and persist launch registrations in one process-safe FIFO queue.
  */
@@ -154,7 +177,7 @@ export class LaunchRegistrationStore {
 
         try {
             const persisted = JSON.parse(await readFile(this.filePath, 'utf8'))
-            if (!isObject(persisted) || persisted.schemaVersion !== LAUNCH_REGISTRATION_SCHEMA_VERSION || !Array.isArray(persisted.registrations)) {
+            if (!isObject(persisted) || ![1, LAUNCH_REGISTRATION_SCHEMA_VERSION].includes(persisted.schemaVersion) || !Array.isArray(persisted.registrations)) {
                 throw new Error('Invalid launch registration file shape')
             }
             this.registrations = persisted.registrations
@@ -190,17 +213,55 @@ export class LaunchRegistrationStore {
             }
 
             const consentAt = this.clock().toISOString()
+            const cancellationToken = createCancellationToken()
             this.registrations.push({
                 id:             randomUUID(),
                 createdAt:      consentAt,
                 consentAt,
                 consentPurpose:'studio-launch',
+                cancellationTokenHash: hashCancellationToken(cancellationToken).toString('hex'),
                 ...registration,
             })
             this.registrationEmails.add(registration.email)
             await this.save()
 
-            return {success: true, stored: true}
+            return {
+                success: true,
+                stored: true,
+                id: this.registrations.at(-1).id,
+                cancellationToken,
+            }
+        })
+
+        this.mutationQueue = operation.catch(() => undefined)
+        return operation
+    }
+
+    /**
+     * Revoke one launch registration with its single-purpose email token.
+     *
+     * @param {*} id Stored registration identifier.
+     * @param {*} token Raw cancellation token from the email link.
+     * @returns {Promise<boolean>} Whether a matching registration was removed.
+     * @throws {LaunchRegistrationStorageError} If persistence fails.
+     */
+    revoke = (id, token) => {
+        const operation = this.mutationQueue.then(async () => {
+            await this.ready
+
+            if (typeof id !== 'string' || !id.trim() || typeof token !== 'string') {
+                return false
+            }
+
+            const registrationIndex = this.registrations.findIndex(registration => registration?.id === id.trim())
+            if (registrationIndex < 0 || !cancellationTokensMatch(this.registrations[registrationIndex].cancellationTokenHash, token)) {
+                return false
+            }
+
+            const [registration] = this.registrations.splice(registrationIndex, 1)
+            this.registrationEmails.delete(registration.email.trim().toLowerCase())
+            await this.save()
+            return true
         })
 
         this.mutationQueue = operation.catch(() => undefined)

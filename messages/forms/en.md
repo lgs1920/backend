@@ -1,6 +1,8 @@
+# Thank you for contacting LGS1920
+
 Hello {{firstName}},
 
-We have received your message. Thank you for contacting LGS1920.
+Thank you for taking the time to write to us. We have received your message.
 
 Here is the information we received:
 
@@ -17,3 +19,5 @@ We will get back to you shortly.
 Kind regards,
 
 The LGS1920 team
+
+If you did not contact us, please ignore this message.

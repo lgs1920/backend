@@ -72,12 +72,17 @@ export class LaunchRegistrationController {
             }
 
             const result = await this.store.register(body)
+            const {id, cancellationToken, ...publicResult} = result
             if (!this.mailer || !result.stored) {
-                return result
+                return publicResult
             }
 
-            await this.mailer.send(mailPayload, {form: 'launch-registration'})
-            return {...result, sent: true}
+            await this.mailer.send(mailPayload, {
+                form:              'launch-registration',
+                registrationId:     id,
+                cancellationToken,
+            })
+            return {...publicResult, sent: true}
         }
         catch (error) {
             if (error instanceof ContactRequestSecurityError) {
@@ -112,6 +117,48 @@ export class LaunchRegistrationController {
 
             set.status = 500
             return {success: false, error: 'Unable to save launch registration'}
+        }
+    }
+
+    /**
+     * Revoke one launch registration from its private email link.
+     *
+     * @param {object} context Elysia request context.
+     * @returns {Promise<Response>} Public-safe revocation response.
+     */
+    revoke = async ({query, set}) => {
+        const locale = query?.locale === 'fr' ? 'fr' : 'en'
+        const messages = locale === 'fr'
+            ? {
+                success: 'Votre inscription au lancement de LGS1920 Studio a été annulée.',
+                invalid: 'Ce lien d’annulation est invalide ou a déjà été utilisé.',
+            }
+            : {
+                success: 'Your LGS1920 Studio launch registration has been cancelled.',
+                invalid: 'This cancellation link is invalid or has already been used.',
+            }
+        const headers = {
+            'Cache-Control': 'no-store',
+            'Content-Type':  'text/plain; charset=utf-8',
+        }
+
+        try {
+            const revoked = await this.store.revoke(query?.id, query?.token)
+            if (!revoked) {
+                set.status = 404
+                return new Response(messages.invalid, {status: 404, headers})
+            }
+
+            return new Response(messages.success, {status: 200, headers})
+        }
+        catch (error) {
+            if (error instanceof LaunchRegistrationStorageError) {
+                set.status = 503
+                return new Response('Launch registration cancellation is temporarily unavailable.', {status: 503, headers})
+            }
+
+            set.status = 500
+            return new Response('Unable to cancel launch registration.', {status: 500, headers})
         }
     }
 }

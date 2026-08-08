@@ -46,8 +46,45 @@ const FORM_SUBJECTS = {
     'launch-registration': '[LGS1920 Launch Registration]',
 }
 
-const HORIZONTAL_LOGO_MARKDOWN = '![LGS1920 Studio](https://lgs1920.fr/assets/logo/logo-horizontal.png)'
+const HORIZONTAL_LOGO_PATH = '/assets/logo/logo-horizontal.png'
+const CANCELLATION_ROUTE = '/launch-registration/revoke'
 const markdownRenderer = new MarkdownIt({html: false, breaks: true, linkify: true})
+
+const normalizePublicOrigin = (value) => {
+    if (typeof value !== 'string' || !value.trim()) {
+        return null
+    }
+
+    try {
+        const url = new URL(value.trim())
+        if (!['http:', 'https:'].includes(url.protocol)
+            || url.pathname !== '/'
+            || url.search
+            || url.hash
+            || url.username
+            || url.password) {
+            return null
+        }
+
+        return url.origin
+    }
+    catch {
+        return null
+    }
+}
+
+const buildRegistrationCancellationUrl = ({backendPublicUrl, registrationId, cancellationToken, locale}) => {
+    const publicOrigin = normalizePublicOrigin(backendPublicUrl)
+    if (!publicOrigin || typeof registrationId !== 'string' || !registrationId.trim() || typeof cancellationToken !== 'string' || !cancellationToken.trim()) {
+        throw new ContactMailConfigurationError('Registration cancellation URL is not configured')
+    }
+
+    const url = new URL(CANCELLATION_ROUTE, `${publicOrigin}/`)
+    url.searchParams.set('id', registrationId.trim())
+    url.searchParams.set('token', cancellationToken.trim())
+    url.searchParams.set('locale', locale === 'fr' ? 'fr' : 'en')
+    return url.toString()
+}
 
 /**
  * Read one bounded SMTP timeout from the server environment.
@@ -203,11 +240,69 @@ const interpolateFormMessage = (template, form) => template
  * Append the shared horizontal logo footer to one mail body.
  *
  * @param {string} message Mail body in Markdown or plain text.
+ * @param {string} origin Public site origin used to resolve the logo asset.
  * @returns {string} Mail body with one horizontal logo footer.
  */
-const appendLogoFooter = (message) => message.includes(HORIZONTAL_LOGO_MARKDOWN)
-    ? message
-    : `${message.trim()}\n\n---\n\n${HORIZONTAL_LOGO_MARKDOWN}`
+const appendLogoFooter = (message, origin) => {
+    const publicOrigin = normalizePublicOrigin(origin)
+    if (!publicOrigin) {
+        throw new ContactMailConfigurationError('Public site URL is not configured')
+    }
+
+    const logoMarkdown = `![LGS1920 Studio](${publicOrigin}${HORIZONTAL_LOGO_PATH})`
+    return message.includes(logoMarkdown)
+        ? message
+        : `${message.trim()}\n\n---\n\n${logoMarkdown}`
+}
+
+/**
+ * Append the single-use launch registration cancellation link.
+ *
+ * @param {string} message Mail body in Markdown.
+ * @param {'en'|'fr'} locale Mail locale.
+ * @param {string} cancellationUrl Private backend cancellation URL.
+ * @returns {string} Mail body with the cancellation link.
+ */
+const appendCancellationLink = (message, locale, cancellationUrl) => {
+    const linkLabel = locale === 'fr'
+        ? 'Demander l’annulation de l’inscription'
+        : 'Cancel this registration'
+    return `${message.trim()}\n\n[${linkLabel}](${cancellationUrl})`
+}
+
+/**
+ * Replace the client template's single-use registration URL placeholder.
+ *
+ * @param {string} message Markdown message content.
+ * @param {string} locale Message locale.
+ * @param {string} cancellationUrl Signed cancellation URL.
+ * @returns {string} Message with the cancellation URL applied.
+ */
+const applyCancellationUrlPlaceholder = (message, locale, cancellationUrl) => message.includes('{{revoke-url}}')
+    ? message.replaceAll('{{revoke-url}}', cancellationUrl)
+    : appendCancellationLink(message, locale, cancellationUrl)
+
+/**
+ * Ensure the message includes the form-specific anti-spam notice.
+ *
+ * @param {string} message Mail body in Markdown.
+ * @param {'contact'|'launch-registration'} form Form contract.
+ * @param {'en'|'fr'} locale Mail locale.
+ * @returns {string} Mail body with the anti-spam notice.
+ */
+const appendSpamNotice = (message, form, locale) => {
+    const notice = form === 'launch-registration'
+        ? locale === 'fr'
+            ? 'Pour annuler votre inscription, veuillez cliquer sur le lien ci-dessous.'
+            : 'To cancel your registration, please click the link below.'
+        : locale === 'fr'
+            ? 'Si vous ne nous avez pas contacté, veuillez ne pas tenir compte de ce message.'
+            : 'If you did not contact us, please ignore this message.'
+
+    return message.includes(notice)
+        ? message
+        : `${message.trim()}\n\n${notice}`
+}
 
 /**
  * Convert Markdown content to safe HTML for an email body.
@@ -220,19 +315,27 @@ const renderMailHtml = (message) => markdownRenderer.render(message)
 /**
  * Load and interpolate the fixed Markdown fallback for a validated form.
  *
- * @param {string} templateDirectory Directory containing form and locale Markdown files.
+ * @param {string} templateDirectory Directory containing one Markdown fallback per locale.
  * @param {object} form Normalized form message.
- * @returns {Promise<string>} Interpolated Markdown message.
+ * @returns {Promise<string>} Interpolated Markdown message without the shared footer.
  * @throws {ContactMailConfigurationError} If the fallback file is unavailable or invalid.
  */
 const loadDefaultFormMessage = async (templateDirectory, form) => {
-    const templatePath = path.join(templateDirectory, `${form.locale}.md`)
-
     let template
-    try {
-        template = await readFile(templatePath, 'utf8')
+    const templatePaths = [
+        path.join(templateDirectory, form.form, `${form.locale}.md`),
+        path.join(templateDirectory, `${form.locale}.md`),
+    ]
+    for (const templatePath of templatePaths) {
+        try {
+            template = await readFile(templatePath, 'utf8')
+            break
+        }
+        catch {
+            // Continue with the legacy locale-only fallback when needed.
+        }
     }
-    catch {
+    if (!template) {
         throw new ContactMailConfigurationError('Default form message is unavailable')
     }
 
@@ -241,7 +344,7 @@ const loadDefaultFormMessage = async (templateDirectory, form) => {
         throw new ContactMailConfigurationError('Default form message is invalid')
     }
 
-    return appendLogoFooter(message)
+    return message
 }
 
 /**
@@ -253,11 +356,17 @@ export class ContactMailService {
      * @param {object} [options.env=process.env] Environment-like configuration.
      * @param {object} [options.transporter] Injected nodemailer transport for tests.
      * @param {string} [options.templateDirectory] Fixed directory containing one Markdown fallback per locale.
+     * @param {string} [options.sitePublicUrl] Public site origin used to resolve the logo asset.
+     * @param {string} [options.backendPublicUrl] Public backend origin used by registration cancellation links.
+     * @param {boolean} [options.diagnosticLogging=false] Log safe mail rendering diagnostics.
      */
-    constructor({env = process.env, templateDirectory = path.join(process.cwd(), 'messages', 'forms'), transporter = null} = {}) {
+    constructor({env = process.env, templateDirectory = path.join(process.cwd(), 'messages', 'forms'), transporter = null, sitePublicUrl = undefined, backendPublicUrl = undefined, diagnosticLogging = env.LGS1920_MAIL_DIAGNOSTIC_LOG === 'true'} = {}) {
         this.env = env
         this.templateDirectory = templateDirectory
         this.transporter = transporter
+        this.sitePublicUrl = sitePublicUrl ?? env.LGS1920_SITE_PUBLIC_URL ?? 'https://lgs1920.fr'
+        this.backendPublicUrl = backendPublicUrl ?? env.LGS1920_BACKEND_PUBLIC_URL
+        this.diagnosticLogging = diagnosticLogging
     }
 
     /**
@@ -340,9 +449,11 @@ export class ContactMailService {
      * @param {*} payload Raw public request body.
      * @param {object} [options] Transport options.
      * @param {'contact'|'launch-registration'} [options.form='contact'] Form contract to validate.
+     * @param {string} [options.registrationId] Stored registration identifier for cancellation links.
+     * @param {string} [options.cancellationToken] Single-use registration cancellation token.
      * @returns {Promise<{success: boolean, sent: boolean}>} Public-safe result.
      */
-    send = async (payload, {form = 'contact'} = {}) => {
+    send = async (payload, {form = 'contact', registrationId = undefined, cancellationToken = undefined} = {}) => {
         if (isHoneypotFilled(payload)) {
             return {success: true, sent: false}
         }
@@ -356,25 +467,65 @@ export class ContactMailService {
         const subject = contact.subject
             ? `${subjectPrefix} ${contact.subject}`
             : `${subjectPrefix} submission`
-        const text = contact.renderedMessage
-            ? appendLogoFooter(contact.renderedMessage)
+        const visitorName = `${contact.firstName} ${contact.lastName}`
+        const baseMessage = contact.renderedMessage
+            ? contact.renderedMessage
             : await loadDefaultFormMessage(this.templateDirectory, contact)
+        const messageWithNotice = appendSpamNotice(baseMessage, contact.form, contact.locale)
+        const message = contact.form === 'launch-registration'
+            ? applyCancellationUrlPlaceholder(messageWithNotice, contact.locale, buildRegistrationCancellationUrl({
+                backendPublicUrl:  this.backendPublicUrl,
+                registrationId,
+                cancellationToken,
+                locale:            contact.locale,
+            }))
+            : messageWithNotice
+        const text = appendLogoFooter(message, this.sitePublicUrl)
+        const html = renderMailHtml(text)
+
+        if (this.diagnosticLogging) {
+            console.log('[contact-mail] prepared', {
+                form:                 contact.form,
+                locale:               contact.locale,
+                source:                contact.renderedMessage ? 'site-rendered' : 'backend-fallback',
+                renderedMessageLength: contact.renderedMessage?.length ?? 0,
+                textLength:            text.length,
+                htmlLength:            html.length,
+                logoOrigin:            normalizePublicOrigin(this.sitePublicUrl),
+            })
+        }
 
         try {
             await transporter.sendMail({
                 from:    {
-                    name:    contact.email,
+                    name:    'LGS1920 Studio',
                     address: sender,
                 },
-                to:      recipient,
+                to:      {
+                    name:    visitorName,
+                    address: recipient,
+                },
                 replyTo: contact.email,
                 subject,
                 text,
-                html:    renderMailHtml(text),
+                html,
             })
         }
         catch (error) {
+            if (this.diagnosticLogging) {
+                console.log('[contact-mail] delivery failed', {
+                    form:   contact.form,
+                    locale: contact.locale,
+                })
+            }
             throw new ContactMailDeliveryError('Unable to deliver contact message', error)
+        }
+
+        if (this.diagnosticLogging) {
+            console.log('[contact-mail] accepted by SMTP relay', {
+                form:   contact.form,
+                locale: contact.locale,
+            })
         }
 
         return {success: true, sent: true}

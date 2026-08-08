@@ -81,7 +81,7 @@ describe('launch registration API', () => {
         expect(await response.json()).toEqual({success: true, stored: true})
 
         const persisted = JSON.parse(await readFile(path.join(home, 'data', 'launch-registrations.json'), 'utf8'))
-        expect(persisted.schemaVersion).toBe(1)
+        expect(persisted.schemaVersion).toBe(2)
         expect(persisted.registrations).toHaveLength(1)
         expect(persisted.registrations[0]).toMatchObject({
             firstName: 'Ada',
@@ -96,6 +96,7 @@ describe('launch registration API', () => {
     test('sends a rendered launch-registration message through the shared mail transport', async () => {
         const messages = []
         const mailer = new ContactMailService({
+            backendPublicUrl: 'https://api.test',
             env: {
                 LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
             },
@@ -120,8 +121,75 @@ describe('launch registration API', () => {
         expect(await response.json()).toEqual({success: true, stored: true, sent: true})
         expect(messages).toHaveLength(1)
         expect(messages[0].text).toContain('Bonjour, Ada souhaite être informée du lancement.')
-        expect(messages[0].text).toEndWith('![LGS1920 Studio](https://lgs1920.fr/assets/logo/logo-horizontal.png)')
+        expect(messages[0].text).toContain('Pour annuler votre inscription, veuillez cliquer sur le lien ci-dessous.')
+        expect(messages[0].text).toContain('https://api.test/launch-registration/revoke?id=')
+        expect(messages[0].text).toContain('locale=fr')
+        expect(messages[0].text).toContain('![LGS1920 Studio](https://lgs1920.fr/assets/logo/logo-horizontal.png)')
         expect(messages[0].replyTo).toBe('ada@example.com')
+    })
+
+    test('replaces the client launch template revoke-url placeholder', async () => {
+        const messages = []
+        const mailer = new ContactMailService({
+            backendPublicUrl: 'https://api.test',
+            env: {
+                LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
+            },
+            transporter: {
+                sendMail: async (message) => messages.push(message),
+            },
+        })
+        const {app} = await createContext({mailer})
+
+        const response = await request(app, {
+            to:             'f7a91c',
+            form:           'launch-registration',
+            locale:         'fr',
+            firstName:      'Ada',
+            lastName:       'Lovelace',
+            email:          'placeholder@example.com',
+            consent:        true,
+            renderedMessage: 'Bonjour Ada\n{{revoke-url}}',
+        })
+
+        expect(response.status).toBe(200)
+        expect(messages[0].text).toContain('https://api.test/launch-registration/revoke?id=')
+        expect(messages[0].text).not.toContain('{{revoke-url}}')
+    })
+
+    test('revokes a registration only with the token from its email', async () => {
+        const messages = []
+        const mailer = new ContactMailService({
+            backendPublicUrl: 'https://api.test',
+            env: {
+                LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
+            },
+            transporter: {
+                sendMail: async (message) => messages.push(message),
+            },
+        })
+        const {app, home} = await createContext({mailer})
+
+        await request(app, {
+            to:             'f7a91c',
+            firstName:      'Ada',
+            lastName:       'Lovelace',
+            email:          'ada@example.com',
+            locale:         'fr',
+            consent:        true,
+        })
+
+        const cancellationLink = messages[0].text.match(/https:\/\/api\.test\/launch-registration\/revoke\?[^\s)]+/u)?.[0]
+        expect(cancellationLink).toBeString()
+
+        const revokeResponse = await app.handle(new Request(cancellationLink))
+        expect(revokeResponse.status).toBe(200)
+        expect(await revokeResponse.text()).toContain('annulée')
+
+        const repeatedResponse = await app.handle(new Request(cancellationLink))
+        expect(repeatedResponse.status).toBe(404)
+        const persisted = JSON.parse(await readFile(path.join(home, 'data', 'launch-registrations.json'), 'utf8'))
+        expect(persisted.registrations).toHaveLength(0)
     })
 
     test('rejects an invalid launch mail contract before persisting', async () => {

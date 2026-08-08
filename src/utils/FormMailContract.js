@@ -6,6 +6,7 @@ const FORM_PATTERN = /^[a-z][a-z0-9-]{1,31}$/
 const LOCALE_PATTERN = /^[a-z]{2}(?:-[a-z]{2})?$/
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/
 const UNRESOLVED_PLACEHOLDER_PATTERN = /{{[\s\S]*?}}/
+const REVOKE_URL_PLACEHOLDER = '{{revoke-url}}'
 
 /**
  * Normalize and validate form metadata shared by browser form mail requests.
@@ -54,7 +55,11 @@ export const normalizeFormMailMetadata = (payload, {defaultForm, expectedForm = 
     if (!renderedMessage || renderedMessage.length > MAX_RENDERED_MESSAGE_LENGTH) {
         throw new Error('Invalid rendered form message')
     }
-    if (CONTROL_CHARACTER_PATTERN.test(renderedMessage) || UNRESOLVED_PLACEHOLDER_PATTERN.test(renderedMessage)) {
+    const unresolvedPlaceholders = renderedMessage.match(new RegExp(UNRESOLVED_PLACEHOLDER_PATTERN.source, 'g')) ?? []
+    const onlyAllowedLaunchPlaceholder = form === 'launch-registration'
+        && unresolvedPlaceholders.length > 0
+        && unresolvedPlaceholders.every(placeholder => placeholder === REVOKE_URL_PLACEHOLDER)
+    if (CONTROL_CHARACTER_PATTERN.test(renderedMessage) || (UNRESOLVED_PLACEHOLDER_PATTERN.test(renderedMessage) && !onlyAllowedLaunchPlaceholder)) {
         throw new Error('Invalid rendered form message')
     }
 

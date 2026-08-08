@@ -5,6 +5,7 @@ import {getAllowedOrigins} from '../utils/BackendSecurity.js'
 import {ContactRateLimiter} from '../utils/ContactRateLimiter.js'
 
 export const LAUNCH_REGISTRATION_ROUTE = '/launch-registration'
+export const LAUNCH_REGISTRATION_REVOKE_ROUTE = `${LAUNCH_REGISTRATION_ROUTE}/revoke`
 
 /**
  * Register the public Studio launch registration API on an Elysia application.
@@ -65,6 +66,29 @@ export class LaunchRegistrationResource {
                     409: {description: 'Email address already registered'},
                     429: {description: 'Registration rate limit exceeded'},
                     503: {description: 'Launch registration storage or email delivery unavailable'},
+                },
+            },
+        })
+
+        app.get(LAUNCH_REGISTRATION_REVOKE_ROUTE, this.controller.revoke, {
+            detail: {
+                tags:     ['launch-registration'],
+                summary:  'Cancel a launch registration',
+                description: 'Cancel a launch registration with the single-purpose token sent in its confirmation email.',
+                query: {
+                    type:                 'object',
+                    required:             ['id', 'token'],
+                    additionalProperties: false,
+                    properties: {
+                        id:     {type: 'string', minLength: 1, maxLength: 64},
+                        token:  {type: 'string', minLength: 40, maxLength: 128},
+                        locale: {type: 'string', enum: ['en', 'fr'], default: 'en'},
+                    },
+                },
+                responses: {
+                    200: {description: 'Registration cancelled'},
+                    404: {description: 'Invalid or already used cancellation link'},
+                    503: {description: 'Registration storage unavailable'},
                 },
             },
         })

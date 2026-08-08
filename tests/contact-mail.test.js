@@ -41,10 +41,10 @@ const request = async (app, body, {origin = allowedOrigin, csrfToken = undefined
 
 const createApp = (mailer, rateLimiter = new ContactRateLimiter({
     getClientKey: () => 'test-client',
-})) => {
+}), allowedOrigins = [allowedOrigin]) => {
     const app = new Elysia()
     new ContactMailResource(app, {
-        allowedOrigins: [allowedOrigin],
+        allowedOrigins,
         csrfSecret,
         mailer,
         rateLimiter,
@@ -72,10 +72,13 @@ describe('contact email API', () => {
         expect(messages).toHaveLength(1)
         expect(messages[0]).toMatchObject({
             from:    {
-                name:    'ada@example.com',
+                name:    'LGS1920 Studio',
                 address: 'studio@lgs1920.fr',
             },
-            to:      'studio@lgs1920.fr',
+            to:      {
+                name:    'Ada Lovelace',
+                address: 'studio@lgs1920.fr',
+            },
             replyTo: 'ada@example.com',
             subject: '[LGS1920 Contact] Studio question',
         })
@@ -125,11 +128,30 @@ describe('contact email API', () => {
 
         await request(app, validPayload)
 
-        expect(messages[0].text).toContain('Hello Ada,')
-        expect(messages[0].text).toContain('We have received your message.')
+        expect(messages[0].text).toContain('# Thank you for contacting LGS1920')
+        expect(messages[0].text).toContain('Thank you for taking the time to write to us.')
         expect(messages[0].text).toContain('Name: Ada Lovelace')
+        expect(messages[0].text).toContain('If you did not contact us, please ignore this message.')
         expect(messages[0].text).toEndWith('![LGS1920 Studio](https://lgs1920.fr/assets/logo/logo-horizontal.png)')
         expect(messages[0].text).toContain('I would like to know more about Studio.')
+    })
+
+    test('uses the configured public site URL for the logo', async () => {
+        const messages = []
+        const mailer = new ContactMailService({
+            sitePublicUrl: 'https://dev.lgs1920.fr',
+            env: {
+                LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
+            },
+            transporter: {
+                sendMail: async (message) => messages.push(message),
+            },
+        })
+        const app = createApp(mailer)
+
+        await request(app, validPayload)
+
+        expect(messages[0].text).toContain('https://dev.lgs1920.fr/assets/logo/logo-horizontal.png')
     })
 
     test('rejects unsupported rendered-message metadata without sending', async () => {

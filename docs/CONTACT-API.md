@@ -5,6 +5,8 @@ The public site exposes two separate mutation endpoints:
 - `POST /launch-registration` stores an explicit Studio launch registration in
   `data/launch-registrations.json` and can optionally send its rendered form
   message through the shared SMTP transport.
+- `GET /launch-registration/revoke?id=...&token=...` cancels a registration
+  through the single-purpose link included in its confirmation email.
 - `GET /contact/token` issues a short-lived token for an allowed contact form
   origin.
 - `POST /contact` validates a contact request and sends it through the
@@ -38,9 +40,16 @@ include the opaque `to` target key used by the contact mail configuration. The
 The request may include a bounded `renderedMessage` produced by the site catalog. The
 backend validates the metadata, converts the Markdown content to safe HTML for
 the email body, and also provides the Markdown-derived text alternative.
-When `renderedMessage` is absent, it loads the shared fixed Markdown fallback
-from `messages/forms/<locale>.md`. The same fallback is used for every form;
-the selected locale is part of the request contract.
+When `renderedMessage` is absent, it loads the form-specific Markdown fallback
+from `messages/forms/<form>/<locale>.md`, with the older
+`messages/forms/<locale>.md` files retained as a legacy fallback. The selected
+form and locale are part of the request contract.
+
+Each stored registration receives a cryptographically random cancellation token.
+Only its SHA-256 hash is persisted; the raw token is included in the email link
+and is never returned in the public registration response. The link targets the
+backend origin from `LGS1920_BACKEND_PUBLIC_URL` and is invalid after the
+registration is cancelled.
 
 ## Contact message
 
@@ -67,6 +76,10 @@ origins from `LGS1920_ALLOWED_ORIGINS` or the platform defaults. The `to` value
 is an opaque key resolved by the backend; raw recipient email addresses are
 never accepted from the browser.
 
+The shared email footer links to `/assets/logo/logo-horizontal.png` on the
+configured public site server. Set `LGS1920_SITE_PUBLIC_URL` to override the
+site URL from `servers.json` for the current deployment.
+
 The `form` and `locale` values identify the site catalog entry; the backend
 accepts only `contact` and the `en`/`fr` locales. `renderedMessage` is optional,
 limited to 20,000 characters, and must not contain unresolved `{{...}}`
@@ -90,6 +103,9 @@ LGS1920_SMTP_PASSWORD=...
 LGS1920_CONTACT_CSRF_SECRET=at-least-32-random-characters
 LGS1920_CONTACT_TARGET_F7A91C=your-recipient@example.org
 LGS1920_LAUNCH_REGISTRATION_EMAIL_ENABLED=false
+LGS1920_BACKEND_PUBLIC_URL=https://api.lgs1920.fr
+LGS1920_SITE_PUBLIC_URL=https://lgs1920.fr
+LGS1920_MAIL_DIAGNOSTIC_LOG=false
 ```
 
 When `LGS1920_SMTP_PASSWORD` is configured, the email resolved from the
@@ -109,6 +125,15 @@ resolved address.
 
 The site may own and render localized Markdown catalogs before calling the
 backend. The backend owns form metadata validation, opaque target resolution,
-rate limiting, SMTP delivery, and one shared Markdown fallback per supported
-locale in `messages/forms/`. The client never supplies a template path; only
-the validated locale selects a fallback file.
+rate limiting, SMTP delivery, form-specific Markdown fallbacks, and
+registration cancellation. The client never supplies a template path; only the
+validated form and locale select a fallback file.
+The logo URL uses `LGS1920_SITE_PUBLIC_URL`, `http://localhost:8080` in local
+development when unset, or the configured site server in `servers.json`.
+Set `LGS1920_MAIL_DIAGNOSTIC_LOG=true` temporarily to log the selected form,
+locale, template source, logo origin, and content sizes without logging
+personal data or secrets.
+
+The launch-registration template may contain the special `{{revoke-url}}`
+placeholder. The backend replaces it with the single-use signed cancellation
+URL after storing the registration. Unknown placeholders are rejected.
