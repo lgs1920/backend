@@ -6,6 +6,8 @@ import {ContactRateLimiter} from '../src/utils/ContactRateLimiter.js'
 
 const validPayload = {
     to:        'f7a91c',
+    form:      'contact',
+    locale:    'en',
     firstName: 'Ada',
     lastName:  'Lovelace',
     email:     'ada@example.com',
@@ -79,6 +81,100 @@ describe('contact email API', () => {
         })
         expect(messages[0].text).toContain('I would like to know more about Studio.')
         expect(messages[0].text).not.toContain('New message from the LGS1920 contact form')
+        expect(messages[0].html).toContain('<img')
+        expect(messages[0].html).toContain('logo-horizontal.png')
+    })
+
+    test('sends the rendered site message without treating it as a template path', async () => {
+        const messages = []
+        const mailer = new ContactMailService({
+            env: {
+                LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
+            },
+            transporter: {
+                sendMail: async (message) => messages.push(message),
+            },
+        })
+        const app = createApp(mailer)
+
+        const response = await request(app, {
+            ...validPayload,
+            form:           'contact',
+            locale:         'fr',
+            renderedMessage: 'Bonjour Ada,\nVotre message est bien reçu.',
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({success: true, sent: true})
+        expect(messages[0].text).toContain('Bonjour Ada,\nVotre message est bien reçu.')
+        expect(messages[0].text).toEndWith('![LGS1920 Studio](https://lgs1920.fr/assets/logo/logo-horizontal.png)')
+        expect(messages[0].html).toContain('Bonjour Ada,')
+        expect(messages[0].html).toContain('<img')
+    })
+
+    test('uses the localized Markdown fallback when no rendered message is supplied', async () => {
+        const messages = []
+        const app = createApp(new ContactMailService({
+            env: {
+                LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
+            },
+            transporter: {
+                sendMail: async (message) => messages.push(message),
+            },
+        }))
+
+        await request(app, validPayload)
+
+        expect(messages[0].text).toContain('Hello Ada,')
+        expect(messages[0].text).toContain('We have received your message.')
+        expect(messages[0].text).toContain('Name: Ada Lovelace')
+        expect(messages[0].text).toEndWith('![LGS1920 Studio](https://lgs1920.fr/assets/logo/logo-horizontal.png)')
+        expect(messages[0].text).toContain('I would like to know more about Studio.')
+    })
+
+    test('rejects unsupported rendered-message metadata without sending', async () => {
+        let sendCount = 0
+        const app = createApp(new ContactMailService({
+            env: {
+                LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
+            },
+            transporter: {
+                sendMail: async () => {
+                    sendCount += 1
+                },
+            },
+        }))
+
+        const response = await request(app, {
+            ...validPayload,
+            locale:         'de',
+            renderedMessage: 'Guten Tag',
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({success: false, error: 'Unsupported form locale'})
+        expect(sendCount).toBe(0)
+    })
+
+    test('rejects unresolved or oversized rendered messages without sending', async () => {
+        let sendCount = 0
+        const app = createApp(new ContactMailService({
+            env: {
+                LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
+            },
+            transporter: {
+                sendMail: async () => {
+                    sendCount += 1
+                },
+            },
+        }))
+
+        const unresolved = await request(app, {...validPayload, renderedMessage: 'Hello {{email}}'})
+        const oversized = await request(app, {...validPayload, renderedMessage: 'x'.repeat(20_001)})
+
+        expect(unresolved.status).toBe(400)
+        expect(oversized.status).toBe(400)
+        expect(sendCount).toBe(0)
     })
 
     test('rejects invalid contact payloads', async () => {

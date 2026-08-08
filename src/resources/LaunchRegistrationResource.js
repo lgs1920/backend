@@ -1,5 +1,7 @@
 import { LaunchRegistrationController } from '../controllers/LaunchRegistrationController.js'
 import { LaunchRegistrationStore }      from '../services/LaunchRegistrationStore.js'
+import {ContactMailService} from '../services/ContactMailService.js'
+import {getAllowedOrigins} from '../utils/BackendSecurity.js'
 import {ContactRateLimiter} from '../utils/ContactRateLimiter.js'
 
 export const LAUNCH_REGISTRATION_ROUTE = '/launch-registration'
@@ -15,9 +17,13 @@ export class LaunchRegistrationResource {
      * @param {object} options Resource configuration.
      * @param {LaunchRegistrationStore} [options.store] Injected store for tests or composition.
      * @param {string} [options.backendHome] Backend home used by the default store.
+     * @param {string[]} [options.allowedOrigins] Exact browser origins allowed to submit registrations.
+     * @param {ContactMailService|null} [options.mailer] Optional shared form mail transport.
      * @param {ContactRateLimiter} [options.rateLimiter] Injected public registration limiter.
      */
     constructor(app, {
+        allowedOrigins = getAllowedOrigins(),
+        mailer = null,
         store = null,
         backendHome = undefined,
         rateLimiter = new ContactRateLimiter({
@@ -29,18 +35,22 @@ export class LaunchRegistrationResource {
         }
 
         this.store = store ?? new LaunchRegistrationStore({backendHome})
-        this.controller = new LaunchRegistrationController(this.store, {rateLimiter})
+        this.controller = new LaunchRegistrationController(this.store, {allowedOrigins, mailer, rateLimiter})
 
         app.post(LAUNCH_REGISTRATION_ROUTE, this.controller.register, {
             detail: {
                 tags:     ['launch-registration'],
                 summary:  'Register for the Studio launch',
-                description: 'Store a first name, last name, email address, and launch-contact consent from the public site.',
+                description: 'Validate and store a launch registration, optionally sending the rendered form message through the shared SMTP relay.',
                 body: {
                     type:                 'object',
-                    required:             ['firstName', 'lastName', 'email', 'consent'],
+                    required:             ['form', 'locale', 'firstName', 'lastName', 'email', 'consent'],
                     additionalProperties: false,
                     properties: {
+                        to:            {type: 'string', minLength: 4, maxLength: 64, example: 'f7a91c', description: 'Opaque server-side contact target key used when email delivery is enabled.'},
+                        form:          {type: 'string', enum: ['launch-registration'], default: 'launch-registration'},
+                        locale:        {type: 'string', enum: ['en', 'fr']},
+                        renderedMessage: {type: 'string', maxLength: 20000, description: 'Rendered site-catalog message. Backend uses a generic envelope when omitted.'},
                         firstName: {type: 'string', maxLength: 80, example: 'Ada'},
                         lastName:  {type: 'string', maxLength: 80, example: 'Lovelace'},
                         email:     {type: 'string', format: 'email', maxLength: 254, example: 'ada@example.com'},
@@ -49,10 +59,12 @@ export class LaunchRegistrationResource {
                     },
                 },
                 responses: {
-                    200: {description: 'Registration accepted'},
+                    200: {description: 'Registration accepted and optionally emailed'},
                     400: {description: 'Invalid registration payload'},
+                    403: {description: 'Registration request origin not allowed'},
+                    409: {description: 'Email address already registered'},
                     429: {description: 'Registration rate limit exceeded'},
-                    503: {description: 'Launch registration storage unavailable'},
+                    503: {description: 'Launch registration storage or email delivery unavailable'},
                 },
             },
         })

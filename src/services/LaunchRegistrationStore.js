@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import {normalizeFormMailMetadata} from '../utils/FormMailContract.js'
 
 export const LAUNCH_REGISTRATION_DATA_PATH = path.join('data', 'launch-registrations.json')
 export const LAUNCH_REGISTRATION_SCHEMA_VERSION = 1
@@ -21,6 +22,19 @@ export class LaunchRegistrationValidationError extends Error {
     constructor(message) {
         super(message)
         this.name = 'LaunchRegistrationValidationError'
+    }
+}
+
+/**
+ * Error raised when a normalized email is already registered for the launch.
+ */
+export class LaunchRegistrationDuplicateError extends Error {
+    /**
+     * Create a duplicate launch registration error.
+     */
+    constructor() {
+        super('Launch registration already exists')
+        this.name = 'LaunchRegistrationDuplicateError'
     }
 }
 
@@ -82,6 +96,13 @@ export const normalizeLaunchRegistrationPayload = (payload) => {
 
     if (payload.consent !== true) {
         throw new LaunchRegistrationValidationError('Consent is required')
+    }
+
+    try {
+        normalizeFormMailMetadata(payload, {defaultForm: 'launch-registration', expectedForm: 'launch-registration'})
+    }
+    catch (error) {
+        throw new LaunchRegistrationValidationError(error.message)
     }
 
     return {
@@ -165,7 +186,7 @@ export class LaunchRegistrationStore {
 
             const registration = normalizeLaunchRegistrationPayload(payload)
             if (this.registrationEmails.has(registration.email)) {
-                return {success: true, stored: false}
+                throw new LaunchRegistrationDuplicateError()
             }
 
             const consentAt = this.clock().toISOString()

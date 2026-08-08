@@ -24,6 +24,7 @@ import { CloudAuthResource }     from './resources/CloudAuthResource.js'
 import { ConvertVideoResource } from './resources/ConvertVideoResource'
 import { LaunchRegistrationResource } from './resources/LaunchRegistrationResource.js'
 import { ContactMailResource }   from './resources/ContactMailResource.js'
+import {ContactMailService} from './services/ContactMailService.js'
 import { CountResource }         from './resources/CountResource.js'
 import { JourneyImportResource } from './resources/JourneyImportResource.js'
 import { PingResource }         from './resources/PingResource'
@@ -180,7 +181,9 @@ new ConvertVideoResource(app, {beforeHandle: internalApiGuard})
 new CloudAuthResource(app)
 new JourneyImportResource(app)
 new LaunchRegistrationResource(app, {
+    allowedOrigins,
     backendHome: configuration.backend.home,
+    mailer: process.env.LGS1920_LAUNCH_REGISTRATION_EMAIL_ENABLED === 'true' ? new ContactMailService() : null,
 })
 new ContactMailResource(app, {
     allowedOrigins,

@@ -5,16 +5,21 @@ import os from 'node:os'
 import path from 'node:path'
 import { LaunchRegistrationResource } from '../src/resources/LaunchRegistrationResource.js'
 import { LaunchRegistrationStore } from '../src/services/LaunchRegistrationStore.js'
+import {ContactMailService} from '../src/services/ContactMailService.js'
 import {ContactRateLimiter} from '../src/utils/ContactRateLimiter.js'
 
 const homes = []
+const allowedOrigin = 'https://registration.test'
 
 /**
  * Create an isolated launch registration application backed by a temporary directory.
  *
+ * @param {object} [options] Test options.
+ * @param {ContactMailService|null} [options.mailer] Optional shared form mail transport.
+ * @param {number} [options.registrationLimit=100] Registration rate limit.
  * @returns {Promise<{app: Elysia, store: LaunchRegistrationStore, home: string}>} Test context.
  */
-const createContext = async ({registrationLimit = 100} = {}) => {
+const createContext = async ({mailer = null, registrationLimit = 100} = {}) => {
     const home = await mkdtemp(path.join(os.tmpdir(), 'lgs1920-launch-registration-'))
     homes.push(home)
     const store = new LaunchRegistrationStore({
@@ -25,6 +30,8 @@ const createContext = async ({registrationLimit = 100} = {}) => {
 
     const app = new Elysia()
     new LaunchRegistrationResource(app, {
+        allowedOrigins: [allowedOrigin],
+        mailer,
         store,
         rateLimiter: new ContactRateLimiter({
             registrationLimit,
@@ -42,10 +49,17 @@ const createContext = async ({registrationLimit = 100} = {}) => {
  * @param {*} body JSON request body.
  * @returns {Promise<Response>} Application response.
  */
-const request = (app, body) => app.handle(new Request('http://registration.test/launch-registration', {
+const request = (app, body, origin = allowedOrigin) => app.handle(new Request('http://registration.test/launch-registration', {
     method:  'POST',
-    headers: {'Content-Type': 'application/json'},
-    body:    JSON.stringify(body),
+    headers: {
+        'Content-Type': 'application/json',
+        Origin:         origin,
+    },
+    body:    JSON.stringify({
+        form:   'launch-registration',
+        locale: 'en',
+        ...body,
+    }),
 }))
 
 afterEach(async () => {
@@ -79,6 +93,62 @@ describe('launch registration API', () => {
         expect(persisted.registrations[0].id).toBeString()
     })
 
+    test('sends a rendered launch-registration message through the shared mail transport', async () => {
+        const messages = []
+        const mailer = new ContactMailService({
+            env: {
+                LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
+            },
+            transporter: {
+                sendMail: async (message) => messages.push(message),
+            },
+        })
+        const {app} = await createContext({mailer})
+
+        const response = await request(app, {
+            to:             'f7a91c',
+            form:           'launch-registration',
+            locale:         'fr',
+            firstName:      'Ada',
+            lastName:       'Lovelace',
+            email:          'ada@example.com',
+            consent:        true,
+            renderedMessage: 'Bonjour, Ada souhaite être informée du lancement.',
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({success: true, stored: true, sent: true})
+        expect(messages).toHaveLength(1)
+        expect(messages[0].text).toContain('Bonjour, Ada souhaite être informée du lancement.')
+        expect(messages[0].text).toEndWith('![LGS1920 Studio](https://lgs1920.fr/assets/logo/logo-horizontal.png)')
+        expect(messages[0].replyTo).toBe('ada@example.com')
+    })
+
+    test('rejects an invalid launch mail contract before persisting', async () => {
+        const mailer = new ContactMailService({
+            env: {
+                LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
+            },
+            transporter: {
+                sendMail: async () => undefined,
+            },
+        })
+        const {app, home} = await createContext({mailer})
+
+        const response = await request(app, {
+            to:             'f7a91c',
+            form:           'contact',
+            firstName:      'Ada',
+            lastName:       'Lovelace',
+            email:          'ada@example.com',
+            consent:        true,
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({success: false, error: 'Unsupported form identifier'})
+        await expect(readFile(path.join(home, 'data', 'launch-registrations.json'), 'utf8')).rejects.toMatchObject({code: 'ENOENT'})
+    })
+
     test('rejects invalid registrations', async () => {
         const {app} = await createContext()
 
@@ -101,6 +171,20 @@ describe('launch registration API', () => {
         expect(await invalidEmail.json()).toEqual({success: false, error: 'Invalid email address'})
     })
 
+    test('rejects registrations from an unlisted origin', async () => {
+        const {app} = await createContext()
+
+        const response = await request(app, {
+            firstName: 'Ada',
+            lastName:  'Lovelace',
+            email:     'ada@example.com',
+            consent:   true,
+        }, 'https://untrusted.test')
+
+        expect(response.status).toBe(403)
+        expect(await response.json()).toEqual({success: false, error: 'Registration request origin is not allowed'})
+    })
+
     test('keeps email registration unique after normalization', async () => {
         const {app, home} = await createContext()
 
@@ -118,8 +202,8 @@ describe('launch registration API', () => {
         })
 
         expect(first.status).toBe(200)
-        expect(duplicate.status).toBe(200)
-        expect(await duplicate.json()).toEqual({success: true, stored: false})
+        expect(duplicate.status).toBe(409)
+        expect(await duplicate.json()).toEqual({success: false, error: 'Already registered'})
 
         const persisted = JSON.parse(await readFile(path.join(home, 'data', 'launch-registrations.json'), 'utf8'))
         expect(persisted.registrations).toHaveLength(1)

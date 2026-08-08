@@ -16,3 +16,8 @@ The public contact API keeps SMTP credentials, CSRF material, and recipient
 mappings in the backend environment only. The local `backend/.env` is uploaded
 by the backend deployment workflow to the remote shared environment; it is not
 included in a release archive or Studio build.
+
+The site may send rendered Markdown messages with validated form metadata. The
+backend owns transport validation, opaque recipient resolution, SMTP delivery,
+and fixed English/French Markdown fallbacks under `messages/forms/`; it never
+loads a client-supplied template path.
