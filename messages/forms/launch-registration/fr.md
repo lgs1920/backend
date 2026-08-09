@@ -8,3 +8,7 @@ Nom : {{firstName}} {{lastName}}
 E-mail : {{email}}
 
 Pour annuler votre inscription, veuillez cliquer sur le lien ci-dessous.
+
+Cordialement,
+
+L’équipe LGS1920 Studio

@@ -11,3 +11,7 @@ Subject: {{subject}}
 {{message}}
 
 If you did not contact us, please ignore this message.
+
+Kind regards,
+
+The LGS1920 Studio team
