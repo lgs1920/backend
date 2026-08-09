@@ -51,8 +51,10 @@ const PRODUCTION_LOGO_PATH = '/assets/logo/logo-horizontal.png'
 const PRODUCTION_LOGO_URL = `${PRODUCTION_SITE_PUBLIC_URL}${PRODUCTION_LOGO_PATH}`
 const PRODUCTION_LOGO_MARKUP = `<img src="${PRODUCTION_LOGO_URL}" alt="LGS1920 Studio">`
 const PRODUCTION_LOGO_HTML = `<img src="${PRODUCTION_LOGO_URL}" alt="LGS1920 Studio" height="80" style="height: 80px; width: auto;">`
-const CANCELLATION_ROUTE = '/launch-registration/revoke'
-const REVOCATION_FORM = 'revoke-subscription'
+const SITE_CANCELLATION_ROUTES = {
+    en: '/registration/revoke/',
+    fr: '/fr/registration/revoke/',
+}
 const markdownRenderer = new MarkdownIt({html: false, breaks: true, linkify: true})
 
 const normalizePublicOrigin = (value) => {
@@ -78,13 +80,13 @@ const normalizePublicOrigin = (value) => {
     }
 }
 
-const buildRegistrationCancellationUrl = ({backendPublicUrl, registrationId, cancellationToken, locale}) => {
-    const publicOrigin = normalizePublicOrigin(backendPublicUrl)
+const buildRegistrationCancellationUrl = ({sitePublicUrl, registrationId, cancellationToken, locale}) => {
+    const publicOrigin = normalizePublicOrigin(sitePublicUrl)
     if (!publicOrigin || typeof registrationId !== 'string' || !registrationId.trim() || typeof cancellationToken !== 'string' || !cancellationToken.trim()) {
-        throw new ContactMailConfigurationError('Registration cancellation URL is not configured')
+        throw new ContactMailConfigurationError('Registration page URL is not configured')
     }
 
-    const url = new URL(CANCELLATION_ROUTE, `${publicOrigin}/`)
+    const url = new URL(SITE_CANCELLATION_ROUTES[locale === 'fr' ? 'fr' : 'en'], `${publicOrigin}/`)
     url.searchParams.set('id', registrationId.trim())
     url.searchParams.set('token', cancellationToken.trim())
     url.searchParams.set('locale', locale === 'fr' ? 'fr' : 'en')
@@ -329,31 +331,6 @@ const loadDefaultFormMessage = async (templateDirectory, form, audience = 'ackno
 }
 
 /**
- * Load and interpolate the fixed Markdown revocation acknowledgement.
- *
- * @param {string} templateDirectory Directory containing revocation templates.
- * @param {{firstName: string, locale: 'en'|'fr'}} details Revocation mail details.
- * @returns {Promise<string>} Interpolated Markdown message without the shared footer.
- * @throws {ContactMailConfigurationError} If the template file is unavailable or invalid.
- */
-const loadRevocationMessage = async (templateDirectory, details) => {
-    const templatePath = path.join(templateDirectory, REVOCATION_FORM, `${details.locale}.md`)
-    let template
-    try {
-        template = await readFile(templatePath, 'utf8')
-    }
-    catch {
-        throw new ContactMailConfigurationError('Revocation message template is unavailable')
-    }
-
-    const message = template.replaceAll('{{firstName}}', details.firstName).trim()
-    if (!message || message.length > 20_000 || /{{[\s\S]*?}}/.test(message)) {
-        throw new ContactMailConfigurationError('Revocation message template is invalid')
-    }
-
-    return message
-}
-
 /**
  * Send support notifications and client acknowledgements through the SMTP relay.
  */
@@ -363,15 +340,15 @@ export class ContactMailService {
      * @param {object} [options.env=process.env] Environment-like configuration.
      * @param {object} [options.transporter] Injected nodemailer transport for tests.
      * @param {string} [options.templateDirectory] Fixed directory containing acknowledgement and support Markdown fallbacks.
-     * @param {string} [options.backendPublicUrl] Public backend origin used by registration cancellation links.
+     * @param {string} [options.sitePublicUrl] Public site origin used by registration cancellation links.
      * @param {boolean} [options.diagnosticLogging=false] Log safe mail rendering diagnostics.
      */
-    constructor({env = process.env, templateDirectory = path.join(process.cwd(), 'messages', 'forms'), transporter = null, backendPublicUrl = undefined, diagnosticLogging = env.LGS1920_MAIL_DIAGNOSTIC_LOG === 'true'} = {}) {
+    constructor({env = process.env, templateDirectory = path.join(process.cwd(), 'messages', 'forms'), transporter = null, sitePublicUrl = undefined, diagnosticLogging = env.LGS1920_MAIL_DIAGNOSTIC_LOG === 'true'} = {}) {
         this.env = env
         this.templateDirectory = templateDirectory
         this.transporter = transporter
-        this.sitePublicUrl = PRODUCTION_SITE_PUBLIC_URL
-        this.backendPublicUrl = backendPublicUrl ?? env.LGS1920_BACKEND_PUBLIC_URL
+        this.sitePublicUrl = sitePublicUrl ?? env.LGS1920_SITE_PUBLIC_URL ?? PRODUCTION_SITE_PUBLIC_URL
+        this.logoPublicUrl = PRODUCTION_SITE_PUBLIC_URL
         this.diagnosticLogging = diagnosticLogging
     }
 
@@ -394,22 +371,6 @@ export class ContactMailService {
         }
 
         return {recipient, sender: recipient}
-    }
-
-    /**
-     * Resolve a stable fallback mailbox for revocation acknowledgements created by older registrations.
-     *
-     * @returns {{recipient: string, sender: string}} Resolved default mailbox.
-     * @throws {ContactMailConfigurationError} If no contact target is configured.
-     */
-    getDefaultConfiguredAddresses = () => {
-        const targets = getContactTargetMap(this.env)
-        const targetKey = Object.keys(targets).sort()[0]
-        if (!targetKey) {
-            throw new ContactMailConfigurationError('Contact target mapping is not configured')
-        }
-
-        return this.getConfiguredAddresses(targetKey)
     }
 
     /**
@@ -489,7 +450,7 @@ export class ContactMailService {
         const subject = contact.subject
             ? `${subjectPrefix} ${contact.subject}`
             : `${subjectPrefix} submission`
-        const visitorName = `${contact.firstName} ${contact.lastName}`
+        const visitorName = stripControlCharacters(`${contact.firstName} ${contact.lastName}`)
         const acknowledgementMessage = contact.renderedMessage
             ? contact.renderedMessage
             : await loadDefaultFormMessage(this.templateDirectory, contact, 'acknowledgement')
@@ -498,7 +459,7 @@ export class ContactMailService {
             : await loadDefaultFormMessage(this.templateDirectory, contact, 'support')
         const cancellationUrl = contact.form === 'launch-registration'
             ? buildRegistrationCancellationUrl({
-                backendPublicUrl:  this.backendPublicUrl,
+                sitePublicUrl:     this.sitePublicUrl,
                 registrationId,
                 cancellationToken,
                 locale:            contact.locale,
@@ -507,9 +468,9 @@ export class ContactMailService {
         const clientMessage = contact.form === 'launch-registration'
             ? applyCancellationUrlPlaceholder(acknowledgementMessage, contact.locale, cancellationUrl)
             : acknowledgementMessage
-        const supportText = appendLogoFooter(supportMessage, this.sitePublicUrl)
+        const supportText = appendLogoFooter(supportMessage, this.logoPublicUrl)
         const supportHtml = renderMailHtml(supportText)
-        const clientText = appendLogoFooter(clientMessage, this.sitePublicUrl)
+        const clientText = appendLogoFooter(clientMessage, this.logoPublicUrl)
         const clientHtml = renderMailHtml(clientText)
 
         if (this.diagnosticLogging) {
@@ -522,15 +483,15 @@ export class ContactMailService {
                 htmlLength:            supportHtml.length,
                 clientTextLength:      clientText.length,
                 clientHtmlLength:      clientHtml.length,
-                logoOrigin:            normalizePublicOrigin(this.sitePublicUrl),
+                logoOrigin:            normalizePublicOrigin(this.logoPublicUrl),
             })
         }
 
         try {
             await transporter.sendMail({
                 from:    {
-                    name:    'LGS1920 Studio',
-                    address: sender,
+                    name:    visitorName,
+                    address: contact.email,
                 },
                 to:      {
                     name:    visitorName,
@@ -582,49 +543,4 @@ export class ContactMailService {
         return {success: true, sent: true}
     }
 
-    /**
-     * Send a localized acknowledgement after a launch registration is revoked.
-     *
-     * @param {{firstName: string, email: string, mailTarget?: string|null}} registration Removed registration mail details.
-     * @param {'en'|'fr'} [locale='en'] Message locale.
-     * @returns {Promise<{success: boolean, sent: boolean}>} Public-safe result.
-     */
-    sendRevocation = async (registration, locale = 'en') => {
-        const normalizedLocale = locale === 'fr' ? 'fr' : 'en'
-        const firstName = readText(registration?.firstName, 'first name', MAX_NAME_LENGTH)
-        const email = readEmail(registration?.email)
-        const addresses = registration?.mailTarget
-            ? this.getConfiguredAddresses(registration.mailTarget)
-            : this.getDefaultConfiguredAddresses()
-        const transporter = this.transporter ?? this.createTransport(addresses.sender)
-        const text = appendLogoFooter(await loadRevocationMessage(this.templateDirectory, {
-            firstName,
-            locale: normalizedLocale,
-        }), this.sitePublicUrl)
-        const html = renderMailHtml(text)
-
-        try {
-            await transporter.sendMail({
-                from:    {
-                    name:    'LGS1920 Studio',
-                    address: addresses.sender,
-                },
-                to:      {
-                    name:    firstName,
-                    address: email,
-                },
-                replyTo: addresses.recipient,
-                subject: normalizedLocale === 'fr'
-                    ? '[LGS1920] Confirmation de votre désinscription'
-                    : '[LGS1920] Subscription cancellation confirmed',
-                text,
-                html,
-            })
-        }
-        catch (error) {
-            throw new ContactMailDeliveryError('Unable to deliver revocation message', error)
-        }
-
-        return {success: true, sent: true}
-    }
 }

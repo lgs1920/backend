@@ -72,8 +72,8 @@ describe('contact email API', () => {
         expect(messages).toHaveLength(2)
         expect(messages[0]).toMatchObject({
             from:    {
-                name:    'LGS1920 Studio',
-                address: 'studio@lgs1920.fr',
+                name:    'Ada Lovelace',
+                address: 'ada@example.com',
             },
             to:      {
                 name:    'Ada Lovelace',
@@ -90,6 +90,10 @@ describe('contact email API', () => {
         expect(messages[0].html).toContain('height: 80px')
         expect(messages[0].text).toContain('# New LGS1920 contact form submission')
         expect(messages[1]).toMatchObject({
+            from:    {
+                name:    'LGS1920 Studio',
+                address: 'studio@lgs1920.fr',
+            },
             to:      {
                 name:    'Ada Lovelace',
                 address: 'ada@example.com',

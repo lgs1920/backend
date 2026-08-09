@@ -17,8 +17,7 @@ mappings in the backend environment only. The local `backend/.env` is uploaded
 by the backend deployment workflow to the remote shared environment; it is not
 included in a release archive or Studio build.
 
-The site may send rendered Markdown messages with validated form metadata. The
+The site sends rendered Markdown messages with validated form metadata. The
 backend owns transport validation, opaque recipient resolution, SMTP delivery,
-form-specific English/French Markdown fallbacks under `messages/forms/`, and
-single-use registration cancellation links; it never loads a client-supplied
-template path.
+and single-use registration cancellation links; it does not own the site's
+cancellation page or its localized content.

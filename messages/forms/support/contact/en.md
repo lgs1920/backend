@@ -11,3 +11,7 @@ The contact form has received a new message.
 
 Message:
 {{message}}
+
+Kind regards,
+
+The LGS1920 Studio team

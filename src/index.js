@@ -119,15 +119,10 @@ const isHotStartup = () => {
 const deploymentPlatform = configuration.platform ?? platforms.PROD
 const isDevelopment = deploymentPlatform === platforms.DEV || process.env.NODE_ENV === 'development'
 const allowedOrigins = getAllowedOrigins(deploymentPlatform)
-const backendDefaultPort = Number(configuration.backend.port)
-const backendPortSuffix = (configuration.backend.protocol === 'https' && backendDefaultPort === 443)
-    || (configuration.backend.protocol === 'http' && backendDefaultPort === 80)
-    ? ''
-    : `:${backendDefaultPort}`
-const backendPublicUrl = process.env.LGS1920_BACKEND_PUBLIC_URL
-    ?? `${configuration.backend.protocol}://${configuration.backend.domain}${backendPortSuffix}`
+const sitePublicUrl = process.env.LGS1920_SITE_PUBLIC_URL
+    ?? (isDevelopment ? 'http://localhost:8080' : `${configuration.site.protocol}://${configuration.site.domain}`)
 const mailer = new ContactMailService({
-    backendPublicUrl,
+    sitePublicUrl,
     diagnosticLogging: process.env.LGS1920_MAIL_DIAGNOSTIC_LOG === 'true',
 })
 const publicHttps = process.env.LGS1920_PUBLIC_HTTPS === 'true'

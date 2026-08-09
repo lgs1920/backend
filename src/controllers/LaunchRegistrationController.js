@@ -132,12 +132,10 @@ export class LaunchRegistrationController {
             ? {
                 success: 'Votre inscription au lancement de LGS1920 Studio a été annulée.',
                 invalid: 'Ce lien d’annulation est invalide ou a déjà été utilisé.',
-                mailFailure: 'Votre désinscription a bien été prise en compte, mais l’e-mail de confirmation n’a pas pu être envoyé.',
             }
             : {
                 success: 'Your LGS1920 Studio launch registration has been cancelled.',
                 invalid: 'This cancellation link is invalid or has already been used.',
-                mailFailure: 'Your registration was cancelled, but the confirmation email could not be sent.',
             }
         const headers = {
             'Cache-Control': 'no-store',
@@ -151,21 +149,12 @@ export class LaunchRegistrationController {
                 return new Response(messages.invalid, {status: 404, headers})
             }
 
-            if (this.mailer) {
-                await this.mailer.sendRevocation(revoked, locale)
-            }
-
             return new Response(messages.success, {status: 200, headers})
         }
         catch (error) {
             if (error instanceof LaunchRegistrationStorageError) {
                 set.status = 503
                 return new Response('Launch registration cancellation is temporarily unavailable.', {status: 503, headers})
-            }
-
-            if (error instanceof ContactMailConfigurationError || error instanceof ContactMailDeliveryError) {
-                set.status = 503
-                return new Response(messages.mailFailure, {status: 503, headers})
             }
 
             set.status = 500

@@ -264,11 +264,7 @@ export class LaunchRegistrationStore {
             const [registration] = this.registrations.splice(registrationIndex, 1)
             this.registrationEmails.delete(registration.email.trim().toLowerCase())
             await this.save()
-            return {
-                firstName:  registration.firstName,
-                email:      registration.email,
-                mailTarget: registration.mailTarget ?? null,
-            }
+            return true
         })
 
         this.mutationQueue = operation.catch(() => undefined)

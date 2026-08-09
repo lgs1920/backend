@@ -7,3 +7,7 @@ Un visiteur s’est inscrit au lancement de LGS1920 Studio.
 - Formulaire : {{form}}
 - Nom : {{firstName}} {{lastName}}
 - E-mail : {{email}}
+
+Cordialement,
+
+L’équipe LGS1920 Studio

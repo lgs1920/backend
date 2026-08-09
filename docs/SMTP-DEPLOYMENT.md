@@ -10,14 +10,16 @@ Use one verified SMTP relay account or credential set per environment:
 
 | Environment | Credential scope |
 | --- | --- |
-| Test | Test sender and test recipient where possible |
-| Staging | Staging sender and staging recipient |
-| Production | Production sender and configured recipient |
+| Test | Test relay credentials and test recipient where possible |
+| Staging | Staging relay credentials and staging recipient |
+| Production | Production relay credentials and configured recipient |
 
-The relay provider must authorize the sender domain. Configure SPF and DKIM
-records as requested by the provider, and add a DMARC policy appropriate for
-the domain. Keep the SMTP `From` address stable; the visitor's address is
-displayed as the sender name and sent as `Reply-To` by the backend.
+The relay provider must authorize the Studio sender domain. Configure SPF and
+DKIM records as requested by the provider, and add a DMARC policy appropriate
+for the domain. The support notification uses the visitor's first and last
+name and email as `From`; the acknowledgement uses the stable Studio mailbox
+as `From`. The relay must therefore allow the configured workflow, or the
+support notification may be rejected by its anti-spoofing policy.
 
 Installing Postfix, Exim, or another local SMTP server on the backend host is
 not required for this application. A self-hosted mail server is a separate
@@ -43,9 +45,8 @@ LGS1920_SMTP_SOCKET_TIMEOUT_MS=30000
 ```
 
 For Nuxit, use `smtp.webmo.fr` with `465` and
-`LGS1920_SMTP_SECURE=true` for implicit TLS. The backend requires both contact
-sender and target mapping configuration and does not accept a raw recipient
-address from the browser.
+`LGS1920_SMTP_SECURE=true` for implicit TLS. The backend requires a target
+mapping and does not accept a raw recipient address from the browser.
 Use `587` with `LGS1920_SMTP_SECURE=false` only for a relay that explicitly
 requires STARTTLS.
 When `LGS1920_SMTP_PASSWORD` is present, the address resolved from
@@ -148,10 +149,12 @@ curl -fsS https://api.example.org/ping
 ```
 
 Send one contact message only from test or staging first. Confirm that the
-response is successful, the message reaches the configured recipient, and the
-`Reply-To` address is the visitor's address. Do not use a production contact
-form submission as a connectivity test unless an operational test message has
-been approved.
+response is successful, the support notification reaches the configured
+recipient with `From: Visitor Name <visitor@example.org>`, and the
+acknowledgement reaches the visitor with `From: LGS1920 Studio
+<configured-target@example.org>`. Do not use a production contact form
+submission as a connectivity test unless an operational test message has been
+approved.
 
 Expected failure behavior:
 

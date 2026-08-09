@@ -87,9 +87,9 @@ export class LaunchRegistrationResource {
                     },
                 },
                 responses: {
-                    200: {description: 'Registration cancelled and confirmation emailed'},
+                    200: {description: 'Registration cancelled'},
                     404: {description: 'Invalid or already used cancellation link'},
-                    503: {description: 'Registration storage or confirmation email unavailable'},
+                    503: {description: 'Registration storage unavailable'},
                 },
             },
         })

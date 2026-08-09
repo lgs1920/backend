@@ -7,8 +7,9 @@ The public site exposes two separate mutation endpoints:
   transport: the site-rendered form content to the configured Studio mailbox,
   then a separate acknowledgement to the submitted email address.
 - `GET /launch-registration/revoke?id=...&token=...` cancels a registration
-  through the single-purpose link included in its confirmation email, then sends
-  a localized revocation acknowledgement to the registered email address.
+  through the single-purpose link included in its confirmation email. The link
+  opens a localized Site page, which calls this endpoint and displays the
+  cancellation result.
 - `GET /contact/token` issues a short-lived token for an allowed contact form
   origin.
 - `POST /contact` validates a contact request and sends the site-rendered form
@@ -53,10 +54,9 @@ compatibility). The selected form and locale are part of the request contract.
 Each stored registration receives a cryptographically random cancellation token.
 Only its SHA-256 hash is persisted; the raw token is included in the email link
 and is never returned in the public registration response. The link targets the
-backend origin from `LGS1920_BACKEND_PUBLIC_URL` and is invalid after the
-registration is cancelled. A successful revocation loads the localized
-acknowledgement from `messages/forms/revoke-subscription/<locale>.md`, replaces
-`{{firstName}}`, and sends it to the registered email address.
+Site origin from `LGS1920_SITE_PUBLIC_URL` and is invalid after the
+registration is cancelled. The backend consumes the token exactly once and
+does not own the localized cancellation page content.
 
 ## Contact message
 
@@ -113,6 +113,7 @@ LGS1920_SMTP_PASSWORD=...
 LGS1920_CONTACT_CSRF_SECRET=at-least-32-random-characters
 LGS1920_CONTACT_TARGET_F7A91C=your-recipient@example.org
 LGS1920_BACKEND_PUBLIC_URL=https://api.lgs1920.fr
+LGS1920_SITE_PUBLIC_URL=https://lgs1920.fr
 LGS1920_MAIL_DIAGNOSTIC_LOG=false
 ```
 
@@ -121,13 +122,13 @@ contact target key is used as the SMTP login. `LGS1920_SMTP_USER` remains an
 optional legacy fallback when no resolved target address is passed. Omit both
 credentials when the relay explicitly allows unauthenticated delivery. Never
 expose these values to the browser or commit them to the repository.
-The resolved target address is used as the authenticated SMTP sender and
-recipient. The visitor's email is displayed as the sender name and is also
-sent as `Reply-To`, so mailbox replies go directly to the visitor without
-spoofing the SMTP sender address. `LGS1920_CONTACT_CSRF_SECRET` and the
-`LGS1920_CONTACT_TARGET_*` values are server-only configuration. The target
-key may be included in the frontend request, but it does not reveal the
-resolved address.
+The support notification is sent to the resolved target address with the
+visitor's first and last name and email as its `From` identity. The separate
+acknowledgement is sent from `LGS1920 Studio <resolved-target-address>` to the
+visitor. The resolved target address remains the SMTP login when a password is
+configured. `LGS1920_CONTACT_CSRF_SECRET` and the `LGS1920_CONTACT_TARGET_*`
+values are server-only configuration. The target key may be included in the
+frontend request, but it does not reveal the resolved address.
 
 ## Ownership split
 

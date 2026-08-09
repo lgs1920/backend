@@ -11,3 +11,9 @@ Le formulaire de contact a reçu un nouveau message.
 
 Message :
 {{message}}
+
+Merci de l’attention portée à ce message.
+
+Cordialement,
+
+L’équipe LGS1920 Studio
