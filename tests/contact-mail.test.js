@@ -86,6 +86,8 @@ describe('contact email API', () => {
         expect(messages[0].text).not.toContain('New message from the LGS1920 contact form')
         expect(messages[0].html).toContain('<img')
         expect(messages[0].html).toContain('logo-horizontal.png')
+        expect(messages[0].html).toContain('height="60"')
+        expect(messages[0].html).toContain('height: 60px')
     })
 
     test('sends the rendered site message without treating it as a template path', async () => {
@@ -136,12 +138,12 @@ describe('contact email API', () => {
         expect(messages[0].text).toContain('I would like to know more about Studio.')
     })
 
-    test('uses the configured public site URL for the logo', async () => {
+    test('always uses the production site URL for the logo', async () => {
         const messages = []
         const mailer = new ContactMailService({
-            sitePublicUrl: 'https://dev.lgs1920.fr',
             env: {
                 LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
+                LGS1920_SITE_PUBLIC_URL:   'https://dev.lgs1920.fr',
             },
             transporter: {
                 sendMail: async (message) => messages.push(message),
@@ -151,7 +153,8 @@ describe('contact email API', () => {
 
         await request(app, validPayload)
 
-        expect(messages[0].text).toContain('https://dev.lgs1920.fr/assets/logo/logo-horizontal.png')
+        expect(messages[0].text).toContain('https://lgs1920.fr/assets/logo/logo-horizontal.png')
+        expect(messages[0].text).not.toContain('https://dev.lgs1920.fr/assets/logo/logo-horizontal.png')
     })
 
     test('rejects unsupported rendered-message metadata without sending', async () => {

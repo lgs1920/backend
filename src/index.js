@@ -119,9 +119,6 @@ const isHotStartup = () => {
 const deploymentPlatform = configuration.platform ?? platforms.PROD
 const isDevelopment = deploymentPlatform === platforms.DEV || process.env.NODE_ENV === 'development'
 const allowedOrigins = getAllowedOrigins(deploymentPlatform)
-const publicSiteUrl = process.env.LGS1920_SITE_PUBLIC_URL
-    ?? process.env.LGS1920_STUDIO_PUBLIC_URL
-    ?? (isDevelopment ? 'http://localhost:8080' : `${configuration.site.protocol}://${configuration.site.domain}`)
 const backendDefaultPort = Number(configuration.backend.port)
 const backendPortSuffix = (configuration.backend.protocol === 'https' && backendDefaultPort === 443)
     || (configuration.backend.protocol === 'http' && backendDefaultPort === 80)
@@ -132,7 +129,6 @@ const backendPublicUrl = process.env.LGS1920_BACKEND_PUBLIC_URL
 const mailer = new ContactMailService({
     backendPublicUrl,
     diagnosticLogging: process.env.LGS1920_MAIL_DIAGNOSTIC_LOG === 'true',
-    publicSiteUrl,
 })
 const publicHttps = process.env.LGS1920_PUBLIC_HTTPS === 'true'
 const internalApiGuard = createInternalApiGuard({allowWithoutToken: isDevelopment})

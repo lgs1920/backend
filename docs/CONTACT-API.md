@@ -76,9 +76,9 @@ origins from `LGS1920_ALLOWED_ORIGINS` or the platform defaults. The `to` value
 is an opaque key resolved by the backend; raw recipient email addresses are
 never accepted from the browser.
 
-The shared email footer links to `/assets/logo/logo-horizontal.png` on the
-configured public site server. Set `LGS1920_SITE_PUBLIC_URL` to override the
-site URL from `servers.json` for the current deployment.
+The shared email footer always links to the horizontal production logo at
+`https://lgs1920.fr/assets/logo/logo-horizontal.png`. The HTML image height is
+fixed at 60 pixels, regardless of the backend deployment environment.
 
 The `form` and `locale` values identify the site catalog entry; the backend
 accepts only `contact` and the `en`/`fr` locales. `renderedMessage` is optional,
@@ -104,7 +104,6 @@ LGS1920_CONTACT_CSRF_SECRET=at-least-32-random-characters
 LGS1920_CONTACT_TARGET_F7A91C=your-recipient@example.org
 LGS1920_LAUNCH_REGISTRATION_EMAIL_ENABLED=false
 LGS1920_BACKEND_PUBLIC_URL=https://api.lgs1920.fr
-LGS1920_SITE_PUBLIC_URL=https://lgs1920.fr
 LGS1920_MAIL_DIAGNOSTIC_LOG=false
 ```
 
@@ -128,8 +127,8 @@ backend. The backend owns form metadata validation, opaque target resolution,
 rate limiting, SMTP delivery, form-specific Markdown fallbacks, and
 registration cancellation. The client never supplies a template path; only the
 validated form and locale select a fallback file.
-The logo URL uses `LGS1920_SITE_PUBLIC_URL`, `http://localhost:8080` in local
-development when unset, or the configured site server in `servers.json`.
+The logo URL always uses the production site origin `https://lgs1920.fr`, with
+the horizontal logo rendered at 60 pixels high.
 Set `LGS1920_MAIL_DIAGNOSTIC_LOG=true` temporarily to log the selected form,
 locale, template source, logo origin, and content sizes without logging
 personal data or secrets.

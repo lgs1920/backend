@@ -46,7 +46,11 @@ const FORM_SUBJECTS = {
     'launch-registration': '[LGS1920 Launch Registration]',
 }
 
-const HORIZONTAL_LOGO_PATH = '/assets/logo/logo-horizontal.png'
+const PRODUCTION_SITE_PUBLIC_URL = 'https://lgs1920.fr'
+const PRODUCTION_LOGO_PATH = '/assets/logo/logo-horizontal.png'
+const PRODUCTION_LOGO_URL = `${PRODUCTION_SITE_PUBLIC_URL}${PRODUCTION_LOGO_PATH}`
+const PRODUCTION_LOGO_MARKUP = `<img src="${PRODUCTION_LOGO_URL}" alt="LGS1920 Studio">`
+const PRODUCTION_LOGO_HTML = `<img src="${PRODUCTION_LOGO_URL}" alt="LGS1920 Studio" height="60" style="height: 60px; width: auto;">`
 const CANCELLATION_ROUTE = '/launch-registration/revoke'
 const markdownRenderer = new MarkdownIt({html: false, breaks: true, linkify: true})
 
@@ -249,7 +253,7 @@ const appendLogoFooter = (message, origin) => {
         throw new ContactMailConfigurationError('Public site URL is not configured')
     }
 
-    const logoMarkdown = `![LGS1920 Studio](${publicOrigin}${HORIZONTAL_LOGO_PATH})`
+    const logoMarkdown = `![LGS1920 Studio](${publicOrigin}${PRODUCTION_LOGO_PATH})`
     return message.includes(logoMarkdown)
         ? message
         : `${message.trim()}\n\n---\n\n${logoMarkdown}`
@@ -311,6 +315,7 @@ const appendSpamNotice = (message, form, locale) => {
  * @returns {string} HTML email body.
  */
 const renderMailHtml = (message) => markdownRenderer.render(message)
+    .replaceAll(PRODUCTION_LOGO_MARKUP, PRODUCTION_LOGO_HTML)
 
 /**
  * Load and interpolate the fixed Markdown fallback for a validated form.
@@ -356,15 +361,14 @@ export class ContactMailService {
      * @param {object} [options.env=process.env] Environment-like configuration.
      * @param {object} [options.transporter] Injected nodemailer transport for tests.
      * @param {string} [options.templateDirectory] Fixed directory containing one Markdown fallback per locale.
-     * @param {string} [options.sitePublicUrl] Public site origin used to resolve the logo asset.
      * @param {string} [options.backendPublicUrl] Public backend origin used by registration cancellation links.
      * @param {boolean} [options.diagnosticLogging=false] Log safe mail rendering diagnostics.
      */
-    constructor({env = process.env, templateDirectory = path.join(process.cwd(), 'messages', 'forms'), transporter = null, sitePublicUrl = undefined, backendPublicUrl = undefined, diagnosticLogging = env.LGS1920_MAIL_DIAGNOSTIC_LOG === 'true'} = {}) {
+    constructor({env = process.env, templateDirectory = path.join(process.cwd(), 'messages', 'forms'), transporter = null, backendPublicUrl = undefined, diagnosticLogging = env.LGS1920_MAIL_DIAGNOSTIC_LOG === 'true'} = {}) {
         this.env = env
         this.templateDirectory = templateDirectory
         this.transporter = transporter
-        this.sitePublicUrl = sitePublicUrl ?? env.LGS1920_SITE_PUBLIC_URL ?? 'https://lgs1920.fr'
+        this.sitePublicUrl = PRODUCTION_SITE_PUBLIC_URL
         this.backendPublicUrl = backendPublicUrl ?? env.LGS1920_BACKEND_PUBLIC_URL
         this.diagnosticLogging = diagnosticLogging
     }
