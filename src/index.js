@@ -194,7 +194,7 @@ new JourneyImportResource(app)
 new LaunchRegistrationResource(app, {
     allowedOrigins,
     backendHome: configuration.backend.home,
-    mailer: process.env.LGS1920_LAUNCH_REGISTRATION_EMAIL_ENABLED === 'true' ? mailer : null,
+    mailer,
 })
 new ContactMailResource(app, {
     allowedOrigins,

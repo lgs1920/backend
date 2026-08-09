@@ -15,7 +15,7 @@ const REVOKE_URL_PLACEHOLDER = '{{revoke-url}}'
  * @param {object} options Validation options.
  * @param {string} options.defaultForm Form used when legacy clients omit the identifier.
  * @param {string} [options.expectedForm] Form required by the receiving endpoint.
- * @returns {{form: string, locale: string, renderedMessage: string|null}} Normalized metadata.
+ * @returns {{form: string, locale: string, renderedMessage: string|null, supportRenderedMessage: string|null}} Normalized metadata.
  * @throws {Error} If metadata is unsupported or the rendered message is unsafe or oversized.
  */
 export const normalizeFormMailMetadata = (payload, {defaultForm, expectedForm = undefined} = {}) => {
@@ -42,26 +42,42 @@ export const normalizeFormMailMetadata = (payload, {defaultForm, expectedForm = 
         throw new Error('Unsupported form locale')
     }
 
-    const renderedValue = payload?.renderedMessage
-    if (renderedValue === undefined || renderedValue === null || renderedValue === '') {
-        return {form, locale, renderedMessage: null}
+    /**
+     * Validate one rendered message supplied by the site.
+     *
+     * @param {*} value Raw rendered message.
+     * @param {object} [options] Validation options.
+     * @param {boolean} [options.allowRevokeUrl=false] Allow the launch acknowledgement placeholder.
+     * @returns {string|null} Bounded rendered message or null when omitted.
+     * @throws {Error} If the rendered message is invalid.
+     */
+    const normalizeRenderedMessage = (value, {allowRevokeUrl = false} = {}) => {
+        if (value === undefined || value === null || value === '') {
+            return null
+        }
+        if (typeof value !== 'string') {
+            throw new Error('Invalid rendered form message')
+        }
+
+        const renderedMessage = value.trim()
+        if (!renderedMessage || renderedMessage.length > MAX_RENDERED_MESSAGE_LENGTH) {
+            throw new Error('Invalid rendered form message')
+        }
+        const unresolvedPlaceholders = renderedMessage.match(new RegExp(UNRESOLVED_PLACEHOLDER_PATTERN.source, 'g')) ?? []
+        const onlyAllowedLaunchPlaceholder = allowRevokeUrl && form === 'launch-registration'
+            && unresolvedPlaceholders.length > 0
+            && unresolvedPlaceholders.every(placeholder => placeholder === REVOKE_URL_PLACEHOLDER)
+        if (CONTROL_CHARACTER_PATTERN.test(renderedMessage) || (UNRESOLVED_PLACEHOLDER_PATTERN.test(renderedMessage) && !onlyAllowedLaunchPlaceholder)) {
+            throw new Error('Invalid rendered form message')
+        }
+
+        return renderedMessage
     }
 
-    if (typeof renderedValue !== 'string') {
-        throw new Error('Invalid rendered form message')
+    return {
+        form,
+        locale,
+        renderedMessage:        normalizeRenderedMessage(payload?.renderedMessage, {allowRevokeUrl: true}),
+        supportRenderedMessage: normalizeRenderedMessage(payload?.supportRenderedMessage),
     }
-
-    const renderedMessage = renderedValue.trim()
-    if (!renderedMessage || renderedMessage.length > MAX_RENDERED_MESSAGE_LENGTH) {
-        throw new Error('Invalid rendered form message')
-    }
-    const unresolvedPlaceholders = renderedMessage.match(new RegExp(UNRESOLVED_PLACEHOLDER_PATTERN.source, 'g')) ?? []
-    const onlyAllowedLaunchPlaceholder = form === 'launch-registration'
-        && unresolvedPlaceholders.length > 0
-        && unresolvedPlaceholders.every(placeholder => placeholder === REVOKE_URL_PLACEHOLDER)
-    if (CONTROL_CHARACTER_PATTERN.test(renderedMessage) || (UNRESOLVED_PLACEHOLDER_PATTERN.test(renderedMessage) && !onlyAllowedLaunchPlaceholder)) {
-        throw new Error('Invalid rendered form message')
-    }
-
-    return {form, locale, renderedMessage}
 }

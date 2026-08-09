@@ -220,6 +220,9 @@ export class LaunchRegistrationStore {
                 consentAt,
                 consentPurpose:'studio-launch',
                 cancellationTokenHash: hashCancellationToken(cancellationToken).toString('hex'),
+                mailTarget:     typeof payload?.to === 'string' && payload.to.trim()
+                    ? payload.to.trim().toLowerCase()
+                    : null,
                 ...registration,
             })
             this.registrationEmails.add(registration.email)
@@ -242,7 +245,7 @@ export class LaunchRegistrationStore {
      *
      * @param {*} id Stored registration identifier.
      * @param {*} token Raw cancellation token from the email link.
-     * @returns {Promise<boolean>} Whether a matching registration was removed.
+     * @returns {Promise<{firstName: string, email: string, mailTarget: string|null}|null>} Removed registration mail details, or null when no matching registration exists.
      * @throws {LaunchRegistrationStorageError} If persistence fails.
      */
     revoke = (id, token) => {
@@ -261,7 +264,11 @@ export class LaunchRegistrationStore {
             const [registration] = this.registrations.splice(registrationIndex, 1)
             this.registrationEmails.delete(registration.email.trim().toLowerCase())
             await this.save()
-            return true
+            return {
+                firstName:  registration.firstName,
+                email:      registration.email,
+                mailTarget: registration.mailTarget ?? null,
+            }
         })
 
         this.mutationQueue = operation.catch(() => undefined)

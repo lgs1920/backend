@@ -69,7 +69,7 @@ describe('contact email API', () => {
 
         expect(response.status).toBe(200)
         expect(await response.json()).toEqual({success: true, sent: true})
-        expect(messages).toHaveLength(1)
+        expect(messages).toHaveLength(2)
         expect(messages[0]).toMatchObject({
             from:    {
                 name:    'LGS1920 Studio',
@@ -86,8 +86,18 @@ describe('contact email API', () => {
         expect(messages[0].text).not.toContain('New message from the LGS1920 contact form')
         expect(messages[0].html).toContain('<img')
         expect(messages[0].html).toContain('logo-horizontal.png')
-        expect(messages[0].html).toContain('height="60"')
-        expect(messages[0].html).toContain('height: 60px')
+        expect(messages[0].html).toContain('height="80"')
+        expect(messages[0].html).toContain('height: 80px')
+        expect(messages[0].text).toContain('# New LGS1920 contact form submission')
+        expect(messages[1]).toMatchObject({
+            to:      {
+                name:    'Ada Lovelace',
+                address: 'ada@example.com',
+            },
+            replyTo: 'studio@lgs1920.fr',
+            subject: '[LGS1920] We received your message',
+        })
+        expect(messages[1].text).toContain('We have received your message and will get back to you as soon as possible.')
     })
 
     test('sends the rendered site message without treating it as a template path', async () => {
@@ -107,14 +117,16 @@ describe('contact email API', () => {
             form:           'contact',
             locale:         'fr',
             renderedMessage: 'Bonjour Ada,\nVotre message est bien reçu.',
+            supportRenderedMessage: 'Nouveau message pour Studio.\nMessage : Votre question.',
         })
 
         expect(response.status).toBe(200)
         expect(await response.json()).toEqual({success: true, sent: true})
-        expect(messages[0].text).toContain('Bonjour Ada,\nVotre message est bien reçu.')
-        expect(messages[0].text).toEndWith('![LGS1920 Studio](https://lgs1920.fr/assets/logo/logo-horizontal.png)')
-        expect(messages[0].html).toContain('Bonjour Ada,')
-        expect(messages[0].html).toContain('<img')
+        expect(messages[0].text).toContain('Nouveau message pour Studio.\nMessage : Votre question.')
+        expect(messages[1].text).toContain('Bonjour Ada,\nVotre message est bien reçu.')
+        expect(messages[1].text).toEndWith('![LGS1920 Studio](https://lgs1920.fr/assets/logo/logo-horizontal.png)')
+        expect(messages[1].html).toContain('Bonjour Ada,')
+        expect(messages[1].html).toContain('<img')
     })
 
     test('uses the localized Markdown fallback when no rendered message is supplied', async () => {
@@ -130,12 +142,14 @@ describe('contact email API', () => {
 
         await request(app, validPayload)
 
-        expect(messages[0].text).toContain('# Thank you for contacting LGS1920')
-        expect(messages[0].text).toContain('Thank you for taking the time to write to us.')
+        expect(messages[0].text).toContain('# New LGS1920 contact form submission')
         expect(messages[0].text).toContain('Name: Ada Lovelace')
-        expect(messages[0].text).toContain('If you did not contact us, please ignore this message.')
-        expect(messages[0].text).toEndWith('![LGS1920 Studio](https://lgs1920.fr/assets/logo/logo-horizontal.png)')
         expect(messages[0].text).toContain('I would like to know more about Studio.')
+        expect(messages[1].text).toContain('# Thank you for contacting LGS1920')
+        expect(messages[1].text).toContain('Thank you for taking the time to write to us.')
+        expect(messages[1].text).toContain('Name: Ada Lovelace')
+        expect(messages[1].text).toContain('If you did not contact us, please ignore this message.')
+        expect(messages[1].text).toEndWith('![LGS1920 Studio](https://lgs1920.fr/assets/logo/logo-horizontal.png)')
     })
 
     test('always uses the production site URL for the logo', async () => {
@@ -196,9 +210,11 @@ describe('contact email API', () => {
 
         const unresolved = await request(app, {...validPayload, renderedMessage: 'Hello {{email}}'})
         const oversized = await request(app, {...validPayload, renderedMessage: 'x'.repeat(20_001)})
+        const unresolvedSupport = await request(app, {...validPayload, supportRenderedMessage: 'Hello {{email}}'})
 
         expect(unresolved.status).toBe(400)
         expect(oversized.status).toBe(400)
+        expect(unresolvedSupport.status).toBe(400)
         expect(sendCount).toBe(0)
     })
 
@@ -303,7 +319,7 @@ describe('contact email API', () => {
         expect(response.status).toBe(429)
         expect(response.headers.get('Retry-After')).toBe('60')
         expect(await response.json()).toEqual({success: false, error: 'Too many contact requests'})
-        expect(messages).toHaveLength(1)
+        expect(messages).toHaveLength(2)
     })
 
     test('limits token issuance independently from message sends', async () => {

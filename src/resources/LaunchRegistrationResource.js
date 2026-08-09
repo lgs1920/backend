@@ -42,7 +42,7 @@ export class LaunchRegistrationResource {
             detail: {
                 tags:     ['launch-registration'],
                 summary:  'Register for the Studio launch',
-                description: 'Validate and store a launch registration, optionally sending the rendered form message through the shared SMTP relay.',
+                description: 'Validate and store a launch registration, then send the site acknowledgement and Studio notification through the shared SMTP relay.',
                 body: {
                     type:                 'object',
                     required:             ['form', 'locale', 'firstName', 'lastName', 'email', 'consent'],
@@ -51,7 +51,8 @@ export class LaunchRegistrationResource {
                         to:            {type: 'string', minLength: 4, maxLength: 64, example: 'f7a91c', description: 'Opaque server-side contact target key used when email delivery is enabled.'},
                         form:          {type: 'string', enum: ['launch-registration'], default: 'launch-registration'},
                         locale:        {type: 'string', enum: ['en', 'fr']},
-                        renderedMessage: {type: 'string', maxLength: 20000, description: 'Rendered site-catalog message. Backend uses a generic envelope when omitted.'},
+                        renderedMessage:        {type: 'string', maxLength: 20000, description: 'Rendered site acknowledgement template for the visitor.'},
+                        supportRenderedMessage: {type: 'string', maxLength: 20000, description: 'Rendered site notification template for the Studio mailbox.'},
                         firstName: {type: 'string', maxLength: 80, example: 'Ada'},
                         lastName:  {type: 'string', maxLength: 80, example: 'Lovelace'},
                         email:     {type: 'string', format: 'email', maxLength: 254, example: 'ada@example.com'},
@@ -60,7 +61,7 @@ export class LaunchRegistrationResource {
                     },
                 },
                 responses: {
-                    200: {description: 'Registration accepted and optionally emailed'},
+                    200: {description: 'Registration accepted and emailed'},
                     400: {description: 'Invalid registration payload'},
                     403: {description: 'Registration request origin not allowed'},
                     409: {description: 'Email address already registered'},
@@ -86,9 +87,9 @@ export class LaunchRegistrationResource {
                     },
                 },
                 responses: {
-                    200: {description: 'Registration cancelled'},
+                    200: {description: 'Registration cancelled and confirmation emailed'},
                     404: {description: 'Invalid or already used cancellation link'},
-                    503: {description: 'Registration storage unavailable'},
+                    503: {description: 'Registration storage or confirmation email unavailable'},
                 },
             },
         })

@@ -47,7 +47,7 @@ export class ContactMailResource {
             detail: {
                 tags:     ['contact'],
                 summary:  'Send a contact message',
-                description: 'Validate a public contact form submission and send it through the configured SMTP relay.',
+                description: 'Validate a public contact form submission and send the visitor acknowledgement plus Studio notification through the configured SMTP relay.',
                 body: {
                     type:                 'object',
                     required:             ['to', 'form', 'locale', 'csrfToken', 'firstName', 'lastName', 'email', 'subject', 'message', 'consent'],
@@ -62,7 +62,8 @@ export class ContactMailResource {
                         email:     {type: 'string', format: 'email', maxLength: 254, example: 'ada@example.com'},
                         subject:   {type: 'string', maxLength: 160, example: 'Studio question'},
                         message:   {type: 'string', maxLength: 5000, example: 'I would like to know more about Studio.'},
-                        renderedMessage: {type: 'string', maxLength: 20000, description: 'Rendered site-catalog message. Backend uses a generic envelope when omitted.'},
+                        renderedMessage:        {type: 'string', maxLength: 20000, description: 'Rendered site acknowledgement template for the visitor.'},
+                        supportRenderedMessage: {type: 'string', maxLength: 20000, description: 'Rendered site notification template for the Studio mailbox.'},
                         consent:   {type: 'boolean', enum: [true], example: true},
                         website:   {type: 'string', maxLength: 200, description: 'Anti-spam honeypot. Must remain empty.'},
                     },

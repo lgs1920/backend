@@ -3,14 +3,17 @@
 The public site exposes two separate mutation endpoints:
 
 - `POST /launch-registration` stores an explicit Studio launch registration in
-  `data/launch-registrations.json` and can optionally send its rendered form
-  message through the shared SMTP transport.
+  `data/launch-registrations.json` and sends two messages through the shared SMTP
+  transport: the site-rendered form content to the configured Studio mailbox,
+  then a separate acknowledgement to the submitted email address.
 - `GET /launch-registration/revoke?id=...&token=...` cancels a registration
-  through the single-purpose link included in its confirmation email.
+  through the single-purpose link included in its confirmation email, then sends
+  a localized revocation acknowledgement to the registered email address.
 - `GET /contact/token` issues a short-lived token for an allowed contact form
   origin.
-- `POST /contact` validates a contact request and sends it through the
-  configured SMTP relay. Contact messages are not persisted by the backend.
+- `POST /contact` validates a contact request and sends the site-rendered form
+  content to the configured Studio mailbox plus a separate acknowledgement to
+  the submitted email address. Contact messages are not persisted by the backend.
 
 ## Launch registration
 
@@ -34,22 +37,26 @@ email address that is already registered returns HTTP `409` with
 The endpoint allows 5 registration requests per client per 15 minutes; limited
 requests return HTTP `429` with a `Retry-After` header.
 
-When `LGS1920_LAUNCH_REGISTRATION_EMAIL_ENABLED=true`, the request must also
-include the opaque `to` target key used by the contact mail configuration. The
-`form` and `locale` fields are required; supported locales are `en` and `fr`.
-The request may include a bounded `renderedMessage` produced by the site catalog. The
-backend validates the metadata, converts the Markdown content to safe HTML for
-the email body, and also provides the Markdown-derived text alternative.
-When `renderedMessage` is absent, it loads the form-specific Markdown fallback
-from `messages/forms/<form>/<locale>.md`, with the older
-`messages/forms/<locale>.md` files retained as a legacy fallback. The selected
-form and locale are part of the request contract.
+The request must include the opaque `to` target key used by the contact mail
+configuration. The `form` and `locale` fields are required; supported locales
+are `en` and `fr`.
+The request may include bounded `renderedMessage` and
+`supportRenderedMessage` values produced by the site catalogs. The backend
+validates both values, converts each Markdown message to safe HTML, and also
+provides a Markdown-derived text alternative. `renderedMessage` is sent to the
+visitor; `supportRenderedMessage` is sent to Studio. When either value is
+absent, the backend loads the corresponding form-specific fallback from
+`messages/forms/<audience>/<form>/<locale>.md` (with the existing
+`messages/forms/<form>/<locale>.md` files retained for acknowledgement
+compatibility). The selected form and locale are part of the request contract.
 
 Each stored registration receives a cryptographically random cancellation token.
 Only its SHA-256 hash is persisted; the raw token is included in the email link
 and is never returned in the public registration response. The link targets the
 backend origin from `LGS1920_BACKEND_PUBLIC_URL` and is invalid after the
-registration is cancelled.
+registration is cancelled. A successful revocation loads the localized
+acknowledgement from `messages/forms/revoke-subscription/<locale>.md`, replaces
+`{{firstName}}`, and sends it to the registered email address.
 
 ## Contact message
 
@@ -65,6 +72,7 @@ registration is cancelled.
   "subject": "Studio question",
   "message": "I would like to know more about Studio.",
   "renderedMessage": "Name: Ada Lovelace\n...",
+  "supportRenderedMessage": "New contact form submission\n...",
   "consent": true,
   "website": ""
 }
@@ -78,14 +86,16 @@ never accepted from the browser.
 
 The shared email footer always links to the horizontal production logo at
 `https://lgs1920.fr/assets/logo/logo-horizontal.png`. The HTML image height is
-fixed at 60 pixels, regardless of the backend deployment environment.
+fixed at 80 pixels, regardless of the backend deployment environment.
 
-The `form` and `locale` values identify the site catalog entry; the backend
-accepts only `contact` and the `en`/`fr` locales. `renderedMessage` is optional,
-limited to 20,000 characters, and must not contain unresolved `{{...}}`
-placeholders or control characters. It is never interpreted as a template path
-and is converted to HTML with a plain-text alternative. The response is `{ "success": true, "sent": true }`
-after the SMTP relay accepts the message. A filled `website` honeypot is accepted as
+The `form` and `locale` values identify the site catalog entries; the backend
+accepts only `contact` and the `en`/`fr` locales. `renderedMessage` is the
+acknowledgement template for the visitor and `supportRenderedMessage` is the
+notification template for Studio. Both are optional, limited to 20,000
+characters, and must not contain unresolved `{{...}}` placeholders or control
+characters. They are never interpreted as template paths and are each converted
+to HTML with a plain-text alternative. The response is `{ "success": true, "sent": true }`
+after the SMTP relay accepts both messages. A filled `website` honeypot is accepted as
 `{ "success": true, "sent": false }` without sending. An unknown target,
 invalid origin, or invalid token is rejected without sending. Missing SMTP or
 CSRF configuration or a relay failure returns HTTP 503 without exposing
@@ -102,7 +112,6 @@ LGS1920_SMTP_SECURE=true
 LGS1920_SMTP_PASSWORD=...
 LGS1920_CONTACT_CSRF_SECRET=at-least-32-random-characters
 LGS1920_CONTACT_TARGET_F7A91C=your-recipient@example.org
-LGS1920_LAUNCH_REGISTRATION_EMAIL_ENABLED=false
 LGS1920_BACKEND_PUBLIC_URL=https://api.lgs1920.fr
 LGS1920_MAIL_DIAGNOSTIC_LOG=false
 ```
@@ -122,17 +131,19 @@ resolved address.
 
 ## Ownership split
 
-The site may own and render localized Markdown catalogs before calling the
-backend. The backend owns form metadata validation, opaque target resolution,
-rate limiting, SMTP delivery, form-specific Markdown fallbacks, and
-registration cancellation. The client never supplies a template path; only the
-validated form and locale select a fallback file.
+The site owns and renders separate localized Markdown catalogs for the visitor
+acknowledgement and the Studio notification before calling the backend. The
+backend owns form metadata validation, opaque target resolution, rate limiting,
+SMTP delivery, form-specific Markdown fallbacks, and registration cancellation.
+The client never supplies a template path; only the validated form and locale
+select fallback files.
 The logo URL always uses the production site origin `https://lgs1920.fr`, with
-the horizontal logo rendered at 60 pixels high.
+the horizontal logo rendered at 80 pixels high.
 Set `LGS1920_MAIL_DIAGNOSTIC_LOG=true` temporarily to log the selected form,
 locale, template source, logo origin, and content sizes without logging
 personal data or secrets.
 
-The launch-registration template may contain the special `{{revoke-url}}`
-placeholder. The backend replaces it with the single-use signed cancellation
-URL after storing the registration. Unknown placeholders are rejected.
+The visitor acknowledgement template for launch registration may contain the
+special `{{revoke-url}}` placeholder. The backend replaces it with the
+single-use signed cancellation URL after storing the registration. Unknown
+placeholders are rejected.
