@@ -161,7 +161,6 @@ describe('contact email API', () => {
         const mailer = new ContactMailService({
             env: {
                 LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
-                LGS1920_SITE_PUBLIC_URL:   'https://dev.lgs1920.fr',
             },
             transporter: {
                 sendMail: async (message) => messages.push(message),

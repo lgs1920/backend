@@ -9,11 +9,10 @@ const productionConfiguration = {
 }
 
 describe('site public URL resolution', () => {
-    test('ignores a stale localhost override in production', () => {
+    test('uses the generated production deployment origin', () => {
         expect(resolveSitePublicUrl({
             platform:      'production',
             configuration: productionConfiguration,
-            environment:   {LGS1920_SITE_PUBLIC_URL: 'http://localhost:8080'},
         })).toBe('https://lgs1920.fr')
     })
 
@@ -21,15 +20,25 @@ describe('site public URL resolution', () => {
         expect(resolveSitePublicUrl({
             platform:      'development',
             configuration: productionConfiguration,
-            environment:   {},
         })).toBe('http://localhost:8080')
     })
 
-    test('allows an explicit non-production site origin', () => {
+    test('uses the generated staging deployment origin', () => {
         expect(resolveSitePublicUrl({
             platform:      'staging',
-            configuration: productionConfiguration,
-            environment:   {LGS1920_SITE_PUBLIC_URL: 'https://staging.example.test'},
+            configuration: {
+                site: {
+                    domain:   'staging.example.test',
+                    protocol: 'https',
+                },
+            },
         })).toBe('https://staging.example.test')
+    })
+
+    test('fails when a deployed environment has no site origin', () => {
+        expect(() => resolveSitePublicUrl({
+            platform:      'production',
+            configuration: {},
+        })).toThrow('Site deployment URL is not configured')
     })
 })

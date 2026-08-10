@@ -347,7 +347,7 @@ export class ContactMailService {
         this.env = env
         this.templateDirectory = templateDirectory
         this.transporter = transporter
-        this.sitePublicUrl = sitePublicUrl ?? env.LGS1920_SITE_PUBLIC_URL ?? PRODUCTION_SITE_PUBLIC_URL
+        this.sitePublicUrl = sitePublicUrl
         this.logoPublicUrl = PRODUCTION_SITE_PUBLIC_URL
         this.diagnosticLogging = diagnosticLogging
     }

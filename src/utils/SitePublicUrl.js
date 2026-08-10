@@ -1,7 +1,5 @@
 const DEVELOPMENT_PLATFORM = 'development'
-const PRODUCTION_PLATFORM = 'production'
 const DEVELOPMENT_SITE_PUBLIC_URL = 'http://localhost:8080'
-const PRODUCTION_SITE_PUBLIC_URL = 'https://lgs1920.fr'
 
 /**
  * Build the public site origin from generated deployment configuration.
@@ -19,30 +17,25 @@ const buildConfiguredSiteUrl = (configuration = {}) => {
 /**
  * Resolve the public site origin used by server-generated links.
  *
- * Production always uses the generated deployment site origin so a stale local
- * environment value cannot leak localhost links into public emails.
+ * Deployed environments always use the site origin generated from deployment
+ * configuration. Local development keeps its local site origin.
  *
  * @param {object} options Site URL resolution options.
  * @param {string} options.platform Deployment platform.
  * @param {object} options.configuration Generated server configuration.
- * @param {object} [options.environment=process.env] Environment-like values.
  * @returns {string} Public site origin.
+ * @throws {Error} If a deployed environment has no site origin configured.
  */
-export const resolveSitePublicUrl = ({platform, configuration, environment = process.env} = {}) => {
-    const configuredUrl = typeof environment?.LGS1920_SITE_PUBLIC_URL === 'string'
-        ? environment.LGS1920_SITE_PUBLIC_URL.trim()
-        : ''
+export const resolveSitePublicUrl = ({platform, configuration} = {}) => {
+    if (platform === DEVELOPMENT_PLATFORM) {
+        return DEVELOPMENT_SITE_PUBLIC_URL
+    }
+
     const deploymentSiteUrl = buildConfiguredSiteUrl(configuration)
 
-    if (platform === PRODUCTION_PLATFORM) {
-        return deploymentSiteUrl || PRODUCTION_SITE_PUBLIC_URL
+    if (!deploymentSiteUrl) {
+        throw new Error('Site deployment URL is not configured')
     }
 
-    if (configuredUrl) {
-        return configuredUrl
-    }
-
-    return platform === DEVELOPMENT_PLATFORM
-        ? DEVELOPMENT_SITE_PUBLIC_URL
-        : deploymentSiteUrl || PRODUCTION_SITE_PUBLIC_URL
+    return deploymentSiteUrl
 }
