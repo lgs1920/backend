@@ -11,6 +11,8 @@ Backend for LGS1920
 - [Backend security baseline](docs/SECURITY.md)
 - [Public Studio launch registration and contact APIs](docs/CONTACT-API.md)
 - [SMTP relay deployment memo](docs/SMTP-DEPLOYMENT.md)
+- [Bun command reference](docs/BUN-COMMANDS.md)
+- [Launch registration administration](docs/LAUNCH-REGISTRATIONS-CLI.md)
 
 The public contact API keeps SMTP credentials, CSRF material, and recipient
 mappings in the backend environment only. The local `backend/.env` is uploaded

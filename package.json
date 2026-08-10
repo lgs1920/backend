@@ -4,7 +4,10 @@
   "scripts": {
     "test": "bun test",
     "dev": "NODE_ENV=development bun run --watch --no-clear-screen src/index.js",
-    "deploy": "bun deploy.js"
+    "deploy": "bun deploy.js",
+    "registrations": "bun launch-registrations.js",
+    "backend:stop": "bun backend-process.js stop",
+    "backend:start": "bun backend-process.js start"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.2",

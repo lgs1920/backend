@@ -36,6 +36,7 @@ import {
     getAllowedOrigins,
 } from './utils/BackendSecurity.js'
 import { resolveBackendHost } from './utils/BackendServerConfig.js'
+import {resolveSitePublicUrl} from './utils/SitePublicUrl.js'
 
 /** Route for accessing changelog */
 export const CHANGELOG_ROUTE = 'changelog'
@@ -119,8 +120,10 @@ const isHotStartup = () => {
 const deploymentPlatform = configuration.platform ?? platforms.PROD
 const isDevelopment = deploymentPlatform === platforms.DEV || process.env.NODE_ENV === 'development'
 const allowedOrigins = getAllowedOrigins(deploymentPlatform)
-const sitePublicUrl = process.env.LGS1920_SITE_PUBLIC_URL
-    ?? (isDevelopment ? 'http://localhost:8080' : `${configuration.site.protocol}://${configuration.site.domain}`)
+const sitePublicUrl = resolveSitePublicUrl({
+    platform:      deploymentPlatform,
+    configuration,
+})
 const mailer = new ContactMailService({
     sitePublicUrl,
     diagnosticLogging: process.env.LGS1920_MAIL_DIAGNOSTIC_LOG === 'true',

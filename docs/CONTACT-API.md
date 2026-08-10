@@ -54,9 +54,12 @@ compatibility). The selected form and locale are part of the request contract.
 Each stored registration receives a cryptographically random cancellation token.
 Only its SHA-256 hash is persisted; the raw token is included in the email link
 and is never returned in the public registration response. The link targets the
-Site origin from `LGS1920_SITE_PUBLIC_URL` and is invalid after the
-registration is cancelled. The backend consumes the token exactly once and
-does not own the localized cancellation page content.
+configured Site origin and is invalid after the registration is cancelled.
+Production derives that origin from the generated `servers.json` configuration
+(`https://lgs1920.fr`), so a stale local environment value cannot produce a
+localhost link. Development and non-production deployments may override it with
+`LGS1920_SITE_PUBLIC_URL`. The backend consumes the token exactly once and does
+not own the localized cancellation page content.
 
 ## Contact message
 
@@ -113,6 +116,7 @@ LGS1920_SMTP_PASSWORD=...
 LGS1920_CONTACT_CSRF_SECRET=at-least-32-random-characters
 LGS1920_CONTACT_TARGET_F7A91C=your-recipient@example.org
 LGS1920_BACKEND_PUBLIC_URL=https://api.lgs1920.fr
+# Optional outside production; production derives this from servers.json.
 LGS1920_SITE_PUBLIC_URL=https://lgs1920.fr
 LGS1920_MAIL_DIAGNOSTIC_LOG=false
 ```

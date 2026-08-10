@@ -1,0 +1,382 @@
+import {randomUUID} from 'node:crypto'
+import {execFile} from 'node:child_process'
+import {promisify} from 'node:util'
+import {existsSync} from 'node:fs'
+import {mkdir, readFile, rename, rm, writeFile} from 'node:fs/promises'
+import path from 'node:path'
+import readline from 'node:readline/promises'
+import {stdin as input, stdout as output} from 'node:process'
+import {LAUNCH_REGISTRATION_DATA_PATH, LAUNCH_REGISTRATION_SCHEMA_VERSION} from '../src/services/LaunchRegistrationStore.js'
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const execFileAsync = promisify(execFile)
+
+/**
+ * Error raised when the command-line arguments are invalid.
+ */
+export class LaunchRegistrationCliUsageError extends Error {
+    /**
+     * Create a command-line usage error.
+     *
+     * @param {string} message Human-readable usage message.
+     */
+    constructor(message) {
+        super(message)
+        this.name = 'LaunchRegistrationCliUsageError'
+    }
+}
+
+/**
+ * Parse the launch-registration administration command arguments.
+ *
+ * @param {string[]} args Command-line arguments excluding the executable.
+ * @returns {{action: 'list'|'remove'|'clear'|'help', email: string|null, confirmed: boolean}} Parsed arguments.
+ */
+export const parseArguments = (args = []) => {
+    let action = null
+    let email = null
+    let confirmed = false
+
+    const setAction = nextAction => {
+        if (action && action !== nextAction) {
+            throw new LaunchRegistrationCliUsageError('Choose only one action: --list, --remove <email>, or clear')
+        }
+        action = nextAction
+    }
+
+    for (let index = 0; index < args.length; index += 1) {
+        const argument = args[index]
+        if (argument === '--yes' || argument === '-y') {
+            confirmed = true
+            continue
+        }
+        if (argument === '--help' || argument === '-h') {
+            setAction('help')
+            continue
+        }
+        if (argument === '--list') {
+            setAction('list')
+            continue
+        }
+        if (argument === 'clear' || argument === '--clear') {
+            setAction('clear')
+            continue
+        }
+        if (argument === '--remove') {
+            setAction('remove')
+            email = args[++index]
+            if (!email || email.startsWith('-')) {
+                throw new LaunchRegistrationCliUsageError('--remove requires an email address')
+            }
+            continue
+        }
+        if (argument.startsWith('--remove=')) {
+            setAction('remove')
+            email = argument.slice('--remove='.length)
+            if (!email) {
+                throw new LaunchRegistrationCliUsageError('--remove requires an email address')
+            }
+            continue
+        }
+
+        throw new LaunchRegistrationCliUsageError(`Unknown argument: ${argument}`)
+    }
+
+    return {
+        action: action ?? 'help',
+        email:  email?.trim().toLowerCase() || null,
+        confirmed,
+    }
+}
+
+/**
+ * Resolve the launch-registration data file used by the current backend.
+ *
+ * @param {string} [backendHome] Backend home directory.
+ * @returns {string} Absolute registration data path.
+ */
+export const resolveRegistrationFile = (backendHome = process.env.LGS1920_BACKEND_HOME || process.cwd()) => path.resolve(
+    process.env.LGS1920_REGISTRATION_FILE || path.join(backendHome, LAUNCH_REGISTRATION_DATA_PATH)
+)
+
+/**
+ * Resolve the PM2 process associated with a deployed backend release.
+ *
+ * @param {object} [options] Resolution options.
+ * @param {string} [options.cwd=process.cwd()] Working directory used for environment detection.
+ * @param {NodeJS.ProcessEnv} [options.env=process.env] Environment variables.
+ * @returns {{app: string, bin: string}|null} PM2 configuration, or null for local development.
+ */
+export const resolvePm2Configuration = ({cwd = process.cwd(), env = process.env} = {}) => {
+    const explicitApp = env.LGS1920_PM2_APP?.trim()
+    const platformMatch = cwd.match(new RegExp(`/${['production', 'staging', 'test'].join('|')}/backend/current(?:/|$)`))
+    const platform = platformMatch?.[0]?.split('/')[1]
+    const app = explicitApp || (platform ? `backend-${platform}` : null)
+    if (!app) {
+        return null
+    }
+
+    const bin = env.LGS1920_PM2_BIN?.trim() || '/home/.bun/bin/pm2'
+    if (!env.LGS1920_PM2_BIN && !existsSync(bin)) {
+        return null
+    }
+
+    return {app, bin}
+}
+
+/**
+ * Run one PM2 command without invoking a shell.
+ *
+ * @param {{app: string, bin: string}} configuration PM2 configuration.
+ * @param {string[]} args PM2 arguments.
+ * @returns {Promise<void>} Completion promise.
+ */
+const runPm2 = async ({app, bin}, args) => {
+    await execFileAsync(bin, [...args, app], {encoding: 'utf8'})
+}
+
+/**
+ * Stop the active PM2 backend when the command runs from a deployed release.
+ *
+ * @returns {Promise<{app: string, bin: string}|null>} Stopped process configuration.
+ */
+const stopPm2Backend = async () => {
+    const configuration = resolvePm2Configuration()
+    if (!configuration) {
+        return null
+    }
+
+    try {
+        await runPm2(configuration, ['describe'])
+    }
+    catch {
+        return null
+    }
+
+    console.log(`Stopping PM2 (${configuration.app})...`)
+    await runPm2(configuration, ['stop'])
+    return configuration
+}
+
+/**
+ * Start a PM2 backend stopped by this command.
+ *
+ * @param {{app: string, bin: string}|null} configuration Stopped process configuration.
+ * @returns {Promise<void>} Completion promise.
+ */
+const startPm2Backend = async (configuration) => {
+    if (!configuration) {
+        return
+    }
+
+    console.log(`Restarting PM2 (${configuration.app})...`)
+    await runPm2(configuration, ['start'])
+}
+
+/**
+ * Run one destructive operation while the deployed backend is stopped.
+ *
+ * @param {() => Promise<*>} operation Administrative operation.
+ * @returns {Promise<*>} Operation result.
+ */
+const withBackendStopped = async operation => {
+    const configuration = await stopPm2Backend()
+    try {
+        return await operation()
+    }
+    finally {
+        await startPm2Backend(configuration)
+    }
+}
+
+/**
+ * Read and validate the persisted launch-registration envelope.
+ *
+ * @param {string} filePath Registration data path.
+ * @returns {Promise<{schemaVersion: number, registrations: object[]}>} Persisted data.
+ */
+export const readRegistrationFile = async (filePath) => {
+    let content
+    try {
+        content = await readFile(filePath, 'utf8')
+    }
+    catch (error) {
+        if (error?.code === 'ENOENT') {
+            return {schemaVersion: LAUNCH_REGISTRATION_SCHEMA_VERSION, registrations: []}
+        }
+        throw error
+    }
+
+    let persisted
+    try {
+        persisted = JSON.parse(content)
+    }
+    catch (error) {
+        throw new Error(`Registration data is not valid JSON: ${filePath}`, {cause: error})
+    }
+
+    if (!persisted || typeof persisted !== 'object' || ![1, LAUNCH_REGISTRATION_SCHEMA_VERSION].includes(persisted.schemaVersion) || !Array.isArray(persisted.registrations)) {
+        throw new Error(`Registration data has an invalid format: ${filePath}`)
+    }
+
+    return persisted
+}
+
+/**
+ * Persist registrations through a temporary file and atomic rename.
+ *
+ * @param {string} filePath Registration data path.
+ * @param {object[]} registrations Registrations to persist.
+ * @returns {Promise<void>} Completion promise.
+ */
+export const writeRegistrationFile = async (filePath, registrations) => {
+    await mkdir(path.dirname(filePath), {recursive: true})
+    const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
+    const payload = JSON.stringify({
+        schemaVersion: LAUNCH_REGISTRATION_SCHEMA_VERSION,
+        registrations,
+    }, null, 2)
+
+    try {
+        await writeFile(temporaryPath, `${payload}\n`, {encoding: 'utf8', mode: 0o600})
+        await rename(temporaryPath, filePath)
+    }
+    catch (error) {
+        await rm(temporaryPath, {force: true}).catch(() => undefined)
+        throw error
+    }
+}
+
+/**
+ * Convert private registration records into safe administrative list rows.
+ *
+ * @param {object[]} registrations Persisted registrations.
+ * @returns {object[]} Rows without cancellation token hashes.
+ */
+export const formatRegistrationRows = (registrations) => registrations.map(registration => ({
+    firstName: registration.firstName,
+    lastName:  registration.lastName,
+    email:     registration.email,
+    createdAt: registration.createdAt,
+}))
+
+/**
+ * Remove all registrations matching one normalized email address.
+ *
+ * @param {string} filePath Registration data path.
+ * @param {string} email Email address to remove.
+ * @returns {Promise<{removed: number, remaining: number}>} Removal result.
+ */
+export const removeRegistrations = async (filePath, email) => {
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!EMAIL_PATTERN.test(normalizedEmail)) {
+        throw new LaunchRegistrationCliUsageError('Invalid email address')
+    }
+
+    const persisted = await readRegistrationFile(filePath)
+    const remaining = persisted.registrations.filter(registration => registration?.email?.trim().toLowerCase() !== normalizedEmail)
+    const removed = persisted.registrations.length - remaining.length
+    if (removed > 0) {
+        await writeRegistrationFile(filePath, remaining)
+    }
+
+    return {removed, remaining: remaining.length}
+}
+
+/**
+ * Remove every persisted launch registration.
+ *
+ * @param {string} filePath Registration data path.
+ * @returns {Promise<{removed: number}>} Removal result.
+ */
+export const clearRegistrations = async (filePath) => {
+    const persisted = await readRegistrationFile(filePath)
+    if (persisted.registrations.length > 0) {
+        await writeRegistrationFile(filePath, [])
+    }
+    return {removed: persisted.registrations.length}
+}
+
+const printHelp = () => {
+    console.log('Usage: bun launch-registrations.js --list')
+    console.log('       bun launch-registrations.js --remove <email> [--yes]')
+    console.log('       bun launch-registrations.js clear [--yes]')
+    console.log('')
+    console.log('The command operates on the backend data file selected by LGS1920_REGISTRATION_FILE or the current backend data directory.')
+}
+
+const confirm = async question => {
+    if (!input.isTTY) {
+        return false
+    }
+
+    const prompt = readline.createInterface({input, output})
+    try {
+        const answer = await prompt.question(`${question} [y/N] `)
+        return ['y', 'yes', 'o', 'oui'].includes(answer.trim().toLowerCase())
+    }
+    finally {
+        prompt.close()
+    }
+}
+
+/**
+ * Run the launch-registration administration command.
+ *
+ * @param {string[]} [args] Command-line arguments excluding the executable.
+ * @returns {Promise<void>} Completion promise.
+ */
+export const run = async (args = process.argv.slice(2)) => {
+    const options = parseArguments(args)
+    if (options.action === 'help') {
+        printHelp()
+        return
+    }
+
+    const filePath = resolveRegistrationFile()
+    if (options.action === 'list') {
+        const persisted = await readRegistrationFile(filePath)
+        const rows = formatRegistrationRows(persisted.registrations)
+        if (rows.length === 0) {
+            console.log('No registrations.')
+            return
+        }
+        console.table(rows)
+        return
+    }
+
+    if (options.action === 'remove') {
+        const persisted = await readRegistrationFile(filePath)
+        const matching = persisted.registrations.filter(registration => registration?.email?.trim().toLowerCase() === options.email)
+        if (matching.length === 0) {
+            console.log(`No registration found for ${options.email}.`)
+            return
+        }
+        if (!options.confirmed && !await confirm(`Delete the registration for ${options.email}?`)) {
+            console.log('Deletion cancelled.')
+            return
+        }
+        const result = await withBackendStopped(() => removeRegistrations(filePath, options.email))
+        console.log(`${result.removed} registration(s) deleted.`)
+        return
+    }
+
+    const persisted = await readRegistrationFile(filePath)
+    if (persisted.registrations.length === 0) {
+        console.log('No registrations to delete.')
+        return
+    }
+    if (!options.confirmed && !await confirm(`Delete all ${persisted.registrations.length} registrations?`)) {
+        console.log('Deletion cancelled.')
+        return
+    }
+    const result = await withBackendStopped(() => clearRegistrations(filePath))
+    console.log(`${result.removed} registration(s) deleted.`)
+}
+
+if (import.meta.main) {
+    run().catch(error => {
+        console.error(error instanceof LaunchRegistrationCliUsageError ? error.message : 'Unable to update launch registrations')
+        process.exitCode = 1
+    })
+}

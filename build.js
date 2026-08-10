@@ -21,6 +21,7 @@
 // build.js
 import argparse         from 'argparse'
 import { execSync }     from 'child_process'
+import { copyFileSync } from 'node:fs'
 
 /**
  * Get arguments
@@ -51,4 +52,7 @@ const minify = args.minify?'--minify':''
 const buildDirectory = `./dist/${version}`
 
 // Build the project into /dist/<version>
-execSync(`bun build ${minify} --outdir=${buildDirectory} --target=bun  src/index.js --splitting`)
+execSync(`bun build ${minify} --outdir=${buildDirectory} --target=bun src/index.js --splitting`)
+execSync(`bun build ${minify} --target=bun scripts/launch-registrations-cli.js --outfile=${buildDirectory}/launch-registrations.js`)
+execSync(`bun build ${minify} --target=bun scripts/backend-process-cli.js --outfile=${buildDirectory}/backend-process.js`)
+copyFileSync('package.json', `${buildDirectory}/package.json`)
