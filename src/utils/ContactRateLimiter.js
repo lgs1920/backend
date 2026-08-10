@@ -137,4 +137,20 @@ export class ContactRateLimiter {
         bucket.count += 1
         return null
     }
+
+    /**
+     * Reset one client bucket after an administrative state change.
+     *
+     * @param {'token'|'send'|'registration'} scope Endpoint scope.
+     * @param {object} context Request context used to resolve the client.
+     * @returns {void}
+     */
+    reset = (scope, context) => {
+        if (!['token', 'send', 'registration'].includes(scope)) {
+            throw new TypeError('Unknown contact rate-limit scope')
+        }
+
+        const clientKey = String(this.getClientKey(context) || 'unknown')
+        this.buckets.delete(`${scope}:${clientKey}`)
+    }
 }

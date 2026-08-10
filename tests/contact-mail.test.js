@@ -76,7 +76,7 @@ describe('contact email API', () => {
                 address: 'ada@example.com',
             },
             to:      {
-                name:    'Ada Lovelace',
+                name:    'LGS1920 Studio',
                 address: 'studio@lgs1920.fr',
             },
             replyTo: 'ada@example.com',

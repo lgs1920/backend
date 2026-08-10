@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia'
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { LaunchRegistrationResource } from '../src/resources/LaunchRegistrationResource.js'
@@ -125,9 +125,17 @@ describe('launch registration API', () => {
             name:    'Ada Lovelace',
             address: 'ada@example.com',
         })
+        expect(messages[0].to).toEqual({
+            name:    'LGS1920 Studio',
+            address: 'studio@lgs1920.fr',
+        })
         expect(messages[0].text).toContain('Nouvelle inscription pour Studio.\nNom : Ada Lovelace.')
         expect(messages[0].text).toContain('![LGS1920 Studio](https://lgs1920.fr/assets/logo/logo-horizontal.png)')
         expect(messages[0].replyTo).toBe('ada@example.com')
+        expect(messages[0].envelope).toEqual({
+            from: 'studio@lgs1920.fr',
+            to:   'studio@lgs1920.fr',
+        })
         expect(messages[1]).toMatchObject({
             from:    {
                 name:    'LGS1920 Studio',
@@ -140,9 +148,47 @@ describe('launch registration API', () => {
             replyTo: 'studio@lgs1920.fr',
             subject: '[LGS1920] Confirmation de votre inscription',
         })
+        expect(messages[1].envelope).toEqual({
+            from: 'studio@lgs1920.fr',
+            to:   'ada@example.com',
+        })
         expect(messages[1].text).toContain('Bonjour, Ada souhaite être informée du lancement.')
         expect(messages[1].text).toContain('https://site.test/fr/registration/revoke/?id=')
         expect(messages[1].text).toContain('locale=fr')
+    })
+
+    test('rolls back a registration when email delivery fails', async () => {
+        const mailer = new ContactMailService({
+            sitePublicUrl: 'https://site.test',
+            env: {
+                LGS1920_CONTACT_TARGET_F7A91C: 'studio@lgs1920.fr',
+            },
+            transporter: {
+                sendMail: async () => {
+                    throw new Error('SMTP recipient rejected')
+                },
+            },
+        })
+        const {app, home} = await createContext({mailer})
+
+        const response = await request(app, {
+            to:                     'f7a91c',
+            firstName:              'Ada',
+            lastName:               'Lovelace',
+            email:                  'ada@example.com',
+            consent:                true,
+            renderedMessage:        'Confirmation',
+            supportRenderedMessage: 'Notification',
+        })
+
+        expect(response.status).toBe(503)
+        expect(await response.json()).toEqual({
+            success: false,
+            stored:  false,
+            error:   'Launch registration email delivery is temporarily unavailable',
+        })
+        const persisted = JSON.parse(await readFile(path.join(home, 'data', 'launch-registrations.json'), 'utf8'))
+        expect(persisted.registrations).toHaveLength(0)
     })
 
     test('replaces the client launch template revoke-url placeholder', async () => {
@@ -293,6 +339,100 @@ describe('launch registration API', () => {
 
         const persisted = JSON.parse(await readFile(path.join(home, 'data', 'launch-registrations.json'), 'utf8'))
         expect(persisted.registrations).toHaveLength(1)
+    })
+
+    test('reports duplicates before checking unavailable mail configuration', async () => {
+        const mailer = new ContactMailService({env: {}})
+        const {app, store} = await createContext({mailer})
+        await store.register({
+            form:      'launch-registration',
+            locale:    'en',
+            firstName: 'Ada',
+            lastName:  'Lovelace',
+            email:     'ada@example.com',
+            consent:   true,
+        })
+
+        const duplicate = await request(app, {
+            to:        'f7a91c',
+            firstName: 'Augusta',
+            lastName:  'King',
+            email:     'ADA@example.com',
+            consent:   true,
+        })
+
+        expect(duplicate.status).toBe(409)
+        expect(await duplicate.json()).toEqual({success: false, error: 'Already registered'})
+    })
+
+    test('reloads registrations after the data file is cleared externally', async () => {
+        const {app, home} = await createContext()
+        const payload = {
+            firstName: 'Ada',
+            lastName:  'Lovelace',
+            email:     'ada@example.com',
+            consent:   true,
+        }
+
+        expect((await request(app, payload)).status).toBe(200)
+        await writeFile(
+            path.join(home, 'data', 'launch-registrations.json'),
+            JSON.stringify({schemaVersion: 2, registrations: []}),
+            'utf8',
+        )
+
+        const reRegistration = await request(app, payload)
+        expect(reRegistration.status).toBe(200)
+        expect(await reRegistration.json()).toEqual({success: true, stored: true})
+    })
+
+    test('reloads registrations after one address is removed externally', async () => {
+        const {app, home} = await createContext()
+        const removedPayload = {
+            firstName: 'Ada',
+            lastName:  'Lovelace',
+            email:     'ada@example.com',
+            consent:   true,
+        }
+        const remainingPayload = {
+            firstName: 'Grace',
+            lastName:  'Hopper',
+            email:     'grace@example.com',
+            consent:   true,
+        }
+
+        expect((await request(app, removedPayload)).status).toBe(200)
+        expect((await request(app, remainingPayload)).status).toBe(200)
+        const registrationPath = path.join(home, 'data', 'launch-registrations.json')
+        const persisted = JSON.parse(await readFile(registrationPath, 'utf8'))
+        await writeFile(registrationPath, JSON.stringify({
+            schemaVersion: 2,
+            registrations: persisted.registrations.filter(({email}) => email !== removedPayload.email),
+        }), 'utf8')
+
+        const reRegistration = await request(app, removedPayload)
+        expect(reRegistration.status).toBe(200)
+        expect(await reRegistration.json()).toEqual({success: true, stored: true})
+    })
+
+    test('resets the local registration limit after an external clear', async () => {
+        const {app, home} = await createContext({registrationLimit: 1})
+        const payload = {
+            firstName: 'Ada',
+            lastName:  'Lovelace',
+            email:     'ada@example.com',
+            consent:   true,
+        }
+
+        expect((await request(app, payload)).status).toBe(200)
+        await writeFile(
+            path.join(home, 'data', 'launch-registrations.json'),
+            JSON.stringify({schemaVersion: 2, registrations: []}),
+            'utf8',
+        )
+
+        const reRegistration = await request(app, payload)
+        expect(reRegistration.status).toBe(200)
     })
 
     test('limits repeated registration requests per client', async () => {

@@ -163,6 +163,7 @@ export class LaunchRegistrationStore {
         this.registrations = []
         this.registrationEmails = new Set()
         this.mutationQueue = Promise.resolve()
+        this.fileRevision = null
         this.ready = this.load()
     }
 
@@ -174,9 +175,12 @@ export class LaunchRegistrationStore {
      */
     load = async () => {
         await mkdir(path.dirname(this.filePath), {recursive: true})
+        this.registrations = []
+        this.registrationEmails = new Set()
 
         try {
-            const persisted = JSON.parse(await readFile(this.filePath, 'utf8'))
+            const content = await readFile(this.filePath, 'utf8')
+            const persisted = JSON.parse(content)
             if (!isObject(persisted) || ![1, LAUNCH_REGISTRATION_SCHEMA_VERSION].includes(persisted.schemaVersion) || !Array.isArray(persisted.registrations)) {
                 throw new Error('Invalid launch registration file shape')
             }
@@ -184,13 +188,39 @@ export class LaunchRegistrationStore {
             this.registrationEmails = new Set(this.registrations
                 .map(registration => typeof registration?.email === 'string' ? registration.email.trim().toLowerCase() : null)
                 .filter(Boolean))
+            this.fileRevision = createHash('sha256').update(content).digest('hex')
         }
         catch (error) {
             if (error?.code === 'ENOENT') {
+                this.fileRevision = null
                 return
             }
             throw new LaunchRegistrationStorageError('Unable to read launch registration data', error)
         }
+    }
+
+    /**
+     * Reload registration data and report whether the file changed externally.
+     *
+     * @returns {Promise<boolean>} Whether the persisted file revision changed.
+     */
+    refresh = async () => {
+        await this.ready
+        const previousRevision = this.fileRevision
+        await this.load()
+        return previousRevision !== this.fileRevision
+    }
+
+    /**
+     * Check whether a normalized email already has a launch registration.
+     *
+     * @param {*} email Email address to check.
+     * @returns {Promise<boolean>} Whether the email is already registered.
+     */
+    hasRegistration = async (email) => {
+        await this.refresh()
+        const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
+        return Boolean(normalizedEmail && this.registrationEmails.has(normalizedEmail))
     }
 
     /**
@@ -201,7 +231,7 @@ export class LaunchRegistrationStore {
      */
     register = (payload) => {
         const operation = this.mutationQueue.then(async () => {
-            await this.ready
+            await this.refresh()
 
             if (isHoneypotFilled(payload)) {
                 return {success: true, stored: false}
@@ -241,6 +271,32 @@ export class LaunchRegistrationStore {
     }
 
     /**
+     * Remove one persisted registration after a delivery failure.
+     *
+     * @param {string} id Registration identifier to remove.
+     * @returns {Promise<boolean>} Whether the registration was removed.
+     * @throws {LaunchRegistrationStorageError} If persistence fails.
+     */
+    removeRegistration = (id) => {
+        const operation = this.mutationQueue.then(async () => {
+            await this.refresh()
+
+            const registrationIndex = this.registrations.findIndex(registration => registration?.id === id)
+            if (registrationIndex < 0) {
+                return false
+            }
+
+            const [registration] = this.registrations.splice(registrationIndex, 1)
+            this.registrationEmails.delete(registration.email.trim().toLowerCase())
+            await this.save()
+            return true
+        })
+
+        this.mutationQueue = operation.catch(() => undefined)
+        return operation
+    }
+
+    /**
      * Revoke one launch registration with its single-purpose email token.
      *
      * @param {*} id Stored registration identifier.
@@ -250,7 +306,7 @@ export class LaunchRegistrationStore {
      */
     revoke = (id, token) => {
         const operation = this.mutationQueue.then(async () => {
-            await this.ready
+            await this.refresh()
 
             if (typeof id !== 'string' || !id.trim() || typeof token !== 'string') {
                 return false
@@ -287,6 +343,7 @@ export class LaunchRegistrationStore {
         try {
             await writeFile(temporaryPath, `${payload}\n`, {encoding: 'utf8', mode: 0o600})
             await rename(temporaryPath, this.filePath)
+            this.fileRevision = createHash('sha256').update(`${payload}\n`).digest('hex')
         }
         catch (error) {
             await rm(temporaryPath, {force: true}).catch(() => undefined)

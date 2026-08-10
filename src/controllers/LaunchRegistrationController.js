@@ -53,9 +53,14 @@ export class LaunchRegistrationController {
      * @returns {Promise<object>} Public-safe response envelope.
      */
     register = async ({body, request, server, set}) => {
+        let registrationId = null
+        let storedRegistration = false
         try {
             assertContactOrigin(request.headers.get('origin'), this.allowedOrigins)
 
+            if (await this.store.refresh()) {
+                this.rateLimiter.reset('registration', {request, server})
+            }
             const limited = this.rateLimiter.check('registration', {request, server, set})
             if (limited) {
                 set.status = 429
@@ -67,11 +72,13 @@ export class LaunchRegistrationController {
             const mailPayload = this.mailer && !honeypotFilled
                 ? normalizeLaunchRegistrationMessage({...body, form: body?.form ?? 'launch-registration'})
                 : null
-            if (mailPayload) {
+            if (mailPayload && !await this.store.hasRegistration(body?.email)) {
                 this.mailer.getConfiguredAddresses(mailPayload.to)
             }
 
             const result = await this.store.register(body)
+            registrationId = result.id ?? null
+            storedRegistration = result.stored === true
             const {id, cancellationToken, ...publicResult} = result
             if (!this.mailer || !result.stored) {
                 return publicResult
@@ -111,8 +118,20 @@ export class LaunchRegistrationController {
             }
 
             if (error instanceof ContactMailConfigurationError || error instanceof ContactMailDeliveryError) {
+                if (storedRegistration && registrationId) {
+                    try {
+                        storedRegistration = !await this.store.removeRegistration(registrationId)
+                    }
+                    catch {
+                        // Keep the stored flag truthful if rollback itself fails.
+                    }
+                }
                 set.status = 503
-                return {success: false, error: 'Launch registration email delivery is temporarily unavailable'}
+                return {
+                    success: false,
+                    stored:  storedRegistration,
+                    error:   'Launch registration email delivery is temporarily unavailable',
+                }
             }
 
             set.status = 500

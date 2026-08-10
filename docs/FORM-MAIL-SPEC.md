@@ -15,7 +15,7 @@ shared form mail service.
 
 | Symbol | Source | Meaning |
 | --- | --- | --- |
-| `visitorName` | `firstName` + `lastName` | Display name in the `From` and `To` headers |
+| `visitorName` | `firstName` + `lastName` | Display name in the visitor `From` and acknowledgement `To` headers |
 | `visitorEmail` | `email` | Validated visitor email address |
 | `supportMailbox` | `LGS1920_CONTACT_TARGET_<KEY>` | Server-side Studio mailbox resolved from the opaque `to` key |
 | `supportBody` | `supportRenderedMessage` or backend fallback | Message sent to Studio |
@@ -30,7 +30,7 @@ The support notification must be sent with the following headers:
 
 ```text
 From:     <visitorName> <visitorEmail>
-To:       <supportMailbox>
+To:       LGS1920 Studio <supportMailbox>
 Reply-To: <visitorEmail>
 ```
 
@@ -386,19 +386,23 @@ case the backend replaces the placeholder in place.
 
 For each non-honeypot submission:
 
-1. validate the form payload and resolve `supportMailbox` from the target key;
-2. prepare the support notification and acknowledgement;
-3. send the support notification;
-4. send the acknowledgement;
-5. return success only after both SMTP operations succeed.
+1. validate the form payload and rendered messages;
+2. reject a duplicate launch-registration email before mail configuration checks;
+3. resolve `supportMailbox` from the target key;
+4. persist a new launch registration;
+5. prepare the support notification and acknowledgement;
+6. send the support notification;
+7. send the acknowledgement;
+8. return success only after both SMTP operations succeed.
 
 The messages are sent sequentially. If the support notification fails, the
 acknowledgement is not attempted. If the acknowledgement fails after the
 support notification was accepted, the request reports a delivery failure and
 does not automatically resend the support notification.
 
-For launch registration, persistence occurs before mail delivery. A delivery
-failure therefore does not silently delete the stored registration.
+For launch registration, persistence occurs before mail delivery. If delivery
+fails, the backend rolls back that new registration before returning the
+failure, so the response reports `stored: false` and the visitor may retry.
 
 Honeypot submissions return a successful no-op response and send no messages.
 
@@ -407,12 +411,15 @@ Honeypot submissions return a successful no-op response and send no messages.
 - Invalid form data returns HTTP `400` without sending a message.
 - An unknown target key returns HTTP `400` without sending a message.
 - Missing or invalid SMTP configuration returns HTTP `503`.
-- SMTP delivery failures return HTTP `503` without exposing provider details.
+- SMTP delivery failures return HTTP `503` with `stored: false` for launch
+  registrations, without exposing provider details.
 - SMTP credentials, target mappings, tokens, and raw upstream errors must not be
   logged or returned to the client.
 - The SMTP relay must permit the visitor email to appear in the support
-  notification `From` header. A relay that rewrites or rejects this identity
-  does not satisfy this specification.
+  notification `From` header. The SMTP envelope uses the authenticated Studio
+  sender so relays do not reject the visitor address as an unauthorised
+  `MAIL FROM`. A relay that rewrites or rejects the visible identity does not
+  satisfy this specification.
 
 ## Acceptance criteria
 

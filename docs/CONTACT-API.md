@@ -35,6 +35,8 @@ validation/storage error. A filled `website` honeypot is accepted as
 `{ "success": true, "stored": false }` without creating a record. A normalized
 email address that is already registered returns HTTP `409` with
 `{ "success": false, "error": "Already registered" }`.
+If SMTP rejects delivery, the backend rolls back the new registration and
+returns HTTP `503` with `stored: false`.
 The endpoint allows 5 registration requests per client per 15 minutes; limited
 requests return HTTP `429` with a `Retry-After` header.
 
