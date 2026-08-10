@@ -284,37 +284,6 @@ const applyCancellationUrlPlaceholder = (message, locale, cancellationUrl) => me
     : appendCancellationLink(message, locale, cancellationUrl)
 
 /**
- * Select non-sensitive transport details for optional delivery diagnostics.
- *
- * @param {*} info Nodemailer delivery result.
- * @returns {object} Safe delivery details without message content or credentials.
- */
-const getMailDiagnosticDetails = (info) => ({
-    messageId: info?.messageId ?? null,
-    response:  info?.response ?? null,
-    accepted:  Array.isArray(info?.accepted) ? info.accepted : [],
-    rejected:  Array.isArray(info?.rejected) ? info.rejected : [],
-    envelope:  {
-        from: info?.envelope?.from ?? null,
-        to:   Array.isArray(info?.envelope?.to) ? info.envelope.to : [],
-    },
-})
-
-/**
- * Select non-sensitive details from an SMTP delivery error.
- *
- * @param {*} error SMTP or transport error.
- * @returns {object} Safe error details without credentials or message content.
- */
-const getMailErrorDiagnosticDetails = (error) => ({
-    name:         error?.name ?? null,
-    code:         error?.code ?? null,
-    command:      error?.command ?? null,
-    responseCode: error?.responseCode ?? null,
-    response:     error?.response ?? null,
-})
-
-/**
  * Convert Markdown content to safe HTML for an email body.
  *
  * @param {string} message Markdown message content.
@@ -372,15 +341,13 @@ export class ContactMailService {
      * @param {object} [options.transporter] Injected nodemailer transport for tests.
      * @param {string} [options.templateDirectory] Fixed directory containing acknowledgement and support Markdown fallbacks.
      * @param {string} [options.sitePublicUrl] Public site origin used by registration cancellation links.
-     * @param {boolean} [options.diagnosticLogging=false] Log safe mail rendering diagnostics.
      */
-    constructor({env = process.env, templateDirectory = path.join(process.cwd(), 'messages', 'forms'), transporter = null, sitePublicUrl = undefined, diagnosticLogging = env.LGS1920_MAIL_DIAGNOSTIC_LOG === 'true'} = {}) {
+    constructor({env = process.env, templateDirectory = path.join(process.cwd(), 'messages', 'forms'), transporter = null, sitePublicUrl = undefined} = {}) {
         this.env = env
         this.templateDirectory = templateDirectory
         this.transporter = transporter
         this.sitePublicUrl = sitePublicUrl
         this.logoPublicUrl = PRODUCTION_SITE_PUBLIC_URL
-        this.diagnosticLogging = diagnosticLogging
     }
 
     /**
@@ -504,22 +471,8 @@ export class ContactMailService {
         const clientText = appendLogoFooter(clientMessage, this.logoPublicUrl)
         const clientHtml = renderMailHtml(clientText)
 
-        if (this.diagnosticLogging) {
-            console.log('[contact-mail] prepared', {
-                form:                 contact.form,
-                locale:               contact.locale,
-                source:                contact.renderedMessage ? 'site-rendered' : 'backend-fallback',
-                renderedMessageLength: contact.renderedMessage?.length ?? 0,
-                textLength:            supportText.length,
-                htmlLength:            supportHtml.length,
-                clientTextLength:      clientText.length,
-                clientHtmlLength:      clientHtml.length,
-                logoOrigin:            normalizePublicOrigin(this.logoPublicUrl),
-            })
-        }
-
         try {
-            const supportInfo = await transporter.sendMail({
+            await transporter.sendMail({
                 from:    {
                     name:    visitorName,
                     address: contact.email,
@@ -537,14 +490,7 @@ export class ContactMailService {
                 text: supportText,
                 html: supportHtml,
             })
-            if (this.diagnosticLogging) {
-                console.log('[contact-mail] delivery result', {
-                    messageType: 'support',
-                    ...getMailDiagnosticDetails(supportInfo),
-                })
-            }
-
-            const acknowledgementInfo = await transporter.sendMail({
+            await transporter.sendMail({
                 from:    {
                     name:    'LGS1920 Studio',
                     address: sender,
@@ -568,29 +514,9 @@ export class ContactMailService {
                 text: clientText,
                 html: clientHtml,
             })
-            if (this.diagnosticLogging) {
-                console.log('[contact-mail] delivery result', {
-                    messageType: 'acknowledgement',
-                    ...getMailDiagnosticDetails(acknowledgementInfo),
-                })
-            }
         }
         catch (error) {
-            if (this.diagnosticLogging) {
-                console.log('[contact-mail] delivery failed', {
-                    form:    contact.form,
-                    locale:  contact.locale,
-                    details: getMailErrorDiagnosticDetails(error),
-                })
-            }
             throw new ContactMailDeliveryError('Unable to deliver contact message', error)
-        }
-
-        if (this.diagnosticLogging) {
-            console.log('[contact-mail] accepted by SMTP relay', {
-                form:   contact.form,
-                locale: contact.locale,
-            })
         }
 
         return {success: true, sent: true}

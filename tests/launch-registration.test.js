@@ -247,7 +247,11 @@ describe('launch registration API', () => {
 
         const revokeResponse = await app.handle(new Request(`http://registration.test/launch-registration/revoke${new URL(cancellationLink).search}`))
         expect(revokeResponse.status).toBe(200)
-        expect(await revokeResponse.text()).toContain('annulée')
+        expect(await revokeResponse.json()).toEqual({
+            success: true,
+            email:   'a*a@e*****e.com',
+            message: 'Votre inscription au lancement de LGS1920 Studio a été annulée.',
+        })
         expect(messages).toHaveLength(2)
 
         const repeatedResponse = await app.handle(new Request(`http://registration.test/launch-registration/revoke${new URL(cancellationLink).search}`))

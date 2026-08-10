@@ -126,7 +126,6 @@ const sitePublicUrl = resolveSitePublicUrl({
 })
 const mailer = new ContactMailService({
     sitePublicUrl,
-    diagnosticLogging: process.env.LGS1920_MAIL_DIAGNOSTIC_LOG === 'true',
 })
 const publicHttps = process.env.LGS1920_PUBLIC_HTTPS === 'true'
 const internalApiGuard = createInternalApiGuard({allowWithoutToken: isDevelopment})

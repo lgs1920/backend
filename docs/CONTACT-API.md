@@ -9,7 +9,7 @@ The public site exposes two separate mutation endpoints:
 - `GET /launch-registration/revoke?id=...&token=...` cancels a registration
   through the single-purpose link included in its confirmation email. The link
   opens a localized Site page, which calls this endpoint and displays the
-  cancellation result.
+  cancellation result and the cancelled email address.
 - `GET /contact/token` issues a short-lived token for an allowed contact form
   origin.
 - `POST /contact` validates a contact request and sends the site-rendered form
@@ -57,6 +57,11 @@ Each stored registration receives a cryptographically random cancellation token.
 Only its SHA-256 hash is persisted; the raw token is included in the email link
 and is never returned in the public registration response. The link targets the
 configured Site origin and is invalid after the registration is cancelled.
+Successful cancellation returns JSON containing `success: true`, the
+masked `email` (only the first and last character of the local part and domain
+name, with the final domain suffix preserved), and the localized confirmation
+`message`. The masked email is returned only after the single-use cancellation
+token has been validated.
 Production, staging, and test derive that origin from the generated
 `servers.json` configuration. Local development uses `http://localhost:8080`.
 The backend consumes the token exactly once and does not own the localized
@@ -117,7 +122,6 @@ LGS1920_SMTP_PASSWORD=...
 LGS1920_CONTACT_CSRF_SECRET=at-least-32-random-characters
 LGS1920_CONTACT_TARGET_F7A91C=your-recipient@example.org
 LGS1920_BACKEND_PUBLIC_URL=https://api.lgs1920.fr
-LGS1920_MAIL_DIAGNOSTIC_LOG=false
 ```
 
 When `LGS1920_SMTP_PASSWORD` is configured, the email resolved from the
@@ -143,9 +147,6 @@ The client never supplies a template path; only the validated form and locale
 select fallback files.
 The logo URL always uses the production site origin `https://lgs1920.fr`, with
 the horizontal logo rendered at 80 pixels high.
-Set `LGS1920_MAIL_DIAGNOSTIC_LOG=true` temporarily to log the selected form,
-locale, template source, logo origin, and content sizes without logging
-personal data or secrets.
 
 The visitor acknowledgement template for launch registration may contain the
 special `{{revoke-url}}` placeholder. The backend replaces it with the

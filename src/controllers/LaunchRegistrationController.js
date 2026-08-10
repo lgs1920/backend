@@ -14,6 +14,25 @@ import {getAllowedOrigins} from '../utils/BackendSecurity.js'
 import {assertContactOrigin, ContactRequestSecurityError} from '../utils/ContactRequestSecurity.js'
 import {ContactRateLimiter} from '../utils/ContactRateLimiter.js'
 
+const maskEmailPart = (part) => {
+    const characters = [...part]
+    if (characters.length === 0) {
+        return '***'
+    }
+    if (characters.length === 1) {
+        return `${characters[0]}*`
+    }
+    return `${characters[0]}${'*'.repeat(characters.length - 2)}${characters.at(-1)}`
+}
+
+const maskEmailAddress = (email) => {
+    const [localPart, domainPart] = email.split('@')
+    const suffixIndex = domainPart.lastIndexOf('.')
+    const domainName = suffixIndex > 0 ? domainPart.slice(0, suffixIndex) : domainPart
+    const domainSuffix = suffixIndex > 0 ? domainPart.slice(suffixIndex) : ''
+    return `${maskEmailPart(localPart)}@${maskEmailPart(domainName)}${domainSuffix}`
+}
+
 /**
  * Expose public launch registration mutations without returning personal data.
  */
@@ -168,7 +187,14 @@ export class LaunchRegistrationController {
                 return new Response(messages.invalid, {status: 404, headers})
             }
 
-            return new Response(messages.success, {status: 200, headers})
+            return new Response(JSON.stringify({
+                success: true,
+                email:   maskEmailAddress(revoked.email),
+                message: messages.success,
+            }), {
+                status:  200,
+                headers: {...headers, 'Content-Type': 'application/json; charset=utf-8'},
+            })
         }
         catch (error) {
             if (error instanceof LaunchRegistrationStorageError) {
