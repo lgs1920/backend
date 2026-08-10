@@ -67,6 +67,21 @@ afterEach(async () => {
 })
 
 describe('launch registration API', () => {
+    test('uses an explicit registration file outside the backend release home', async () => {
+        const home = await mkdtemp(path.join(os.tmpdir(), 'lgs1920-launch-registration-configured-'))
+        homes.push(home)
+        const registrationFile = path.join(home, 'shared', 'launch-registrations.json')
+        const app = new Elysia()
+        const resource = new LaunchRegistrationResource(app, {
+            allowedOrigins: [allowedOrigin],
+            registrationFile,
+        })
+
+        await resource.store.ready
+
+        expect(resource.store.filePath).toBe(registrationFile)
+    })
+
     test('stores a valid registration without returning personal data', async () => {
         const {app, home} = await createContext()
 

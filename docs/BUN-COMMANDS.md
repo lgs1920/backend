@@ -142,7 +142,10 @@ For destructive operations launched from a deployed `production/backend/current`
 automatically stops and restarts the matching PM2 process. Local development
 paths do not invoke PM2.
 
-Use an explicit data file when operating on a non-default storage location:
+Deployments keep launch registrations in the shared directory outside the
+versioned release. The active production path is
+`/home/www/lgs1920/production/backend/shared/launch-registrations.json`.
+Use an explicit data file when operating on another storage location:
 
 ```bash
 LGS1920_REGISTRATION_FILE=/path/to/launch-registrations.json bun run registrations --list

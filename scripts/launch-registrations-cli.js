@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
-import {existsSync} from 'node:fs'
+import {existsSync, readFileSync} from 'node:fs'
 import {mkdir, readFile, rename, rm, writeFile} from 'node:fs/promises'
 import path from 'node:path'
 import readline from 'node:readline/promises'
@@ -90,14 +90,39 @@ export const parseArguments = (args = []) => {
 }
 
 /**
+ * Read the generated backend registration path from the active server configuration.
+ *
+ * @param {string} [configurationPath=path.resolve(process.cwd(), 'servers.json')] Server configuration path.
+ * @returns {string|null} Configured registration path, or null when no path is configured.
+ */
+export const readConfiguredRegistrationFile = (configurationPath = path.resolve(process.cwd(), 'servers.json')) => {
+    if (!existsSync(configurationPath)) {
+        return null
+    }
+
+    let configuration
+    try {
+        configuration = JSON.parse(readFileSync(configurationPath, 'utf8'))
+    }
+    catch (error) {
+        throw new Error(`Backend server configuration is not valid JSON: ${configurationPath}`, {cause: error})
+    }
+
+    const registrationFile = configuration?.backend?.registrationFile
+    return typeof registrationFile === 'string' && registrationFile.trim() ? registrationFile.trim() : null
+}
+
+/**
  * Resolve the launch-registration data file used by the current backend.
  *
- * @param {string} [backendHome] Backend home directory.
+ * @param {string} [backendHome] Backend home directory override.
  * @returns {string} Absolute registration data path.
  */
-export const resolveRegistrationFile = (backendHome = process.env.LGS1920_BACKEND_HOME || process.cwd()) => path.resolve(
-    process.env.LGS1920_REGISTRATION_FILE || path.join(backendHome, LAUNCH_REGISTRATION_DATA_PATH)
-)
+export const resolveRegistrationFile = (backendHome = undefined) => {
+    const configuredFile = process.env.LGS1920_REGISTRATION_FILE || readConfiguredRegistrationFile()
+    const resolvedBackendHome = backendHome || process.env.LGS1920_BACKEND_HOME || process.cwd()
+    return path.resolve(configuredFile || path.join(resolvedBackendHome, LAUNCH_REGISTRATION_DATA_PATH))
+}
 
 /**
  * Resolve the PM2 process associated with a deployed backend release.

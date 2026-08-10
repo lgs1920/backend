@@ -3,9 +3,12 @@
 The public site exposes two separate mutation endpoints:
 
 - `POST /launch-registration` stores an explicit Studio launch registration in
-  `data/launch-registrations.json` and sends two messages through the shared SMTP
-  transport: the site-rendered form content to the configured Studio mailbox,
-  then a separate acknowledgement to the submitted email address.
+  the configured registration file. Local development uses
+  `data/launch-registrations.json`; deployed environments use a file in their
+  backend `shared` directory. The endpoint also sends two messages through the
+  shared SMTP transport: the site-rendered form content to the configured
+  Studio mailbox, then a separate acknowledgement to the submitted email
+  address.
 - `GET /launch-registration/revoke?id=...&token=...` cancels a registration
   through the single-purpose link included in its confirmation email. The link
   opens a localized Site page, which calls this endpoint and displays the

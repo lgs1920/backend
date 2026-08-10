@@ -64,6 +64,11 @@ install -d -m 700 /home/www/lgs1920/production/backend/shared
 install -m 600 /dev/null /home/www/lgs1920/production/backend/shared/backend.env
 ```
 
+The same shared directory stores the persistent launch-registration file at
+`/home/www/lgs1920/production/backend/shared/launch-registrations.json`.
+The backend creates that file on the first accepted registration; never place
+it inside `current` or a versioned release directory.
+
 The deployment command uploads the local backend `.env` file to the matching
 remote shared path through the active SSH connection. It creates the shared
 directory with mode `700`, uploads the file without printing its contents, and

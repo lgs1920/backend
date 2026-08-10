@@ -18,8 +18,11 @@ bun run registrations --remove visitor@example.org --yes
 bun run registrations clear --yes
 ```
 
-The command reads `data/launch-registrations.json` below the current backend
-home. Set `LGS1920_REGISTRATION_FILE` to use another explicit file path.
+In local development, the command reads `data/launch-registrations.json` below
+the current backend home. A deployed release reads the persistent path in its
+generated `servers.json`; for example, production uses
+`/home/www/lgs1920/production/backend/shared/launch-registrations.json`.
+Set `LGS1920_REGISTRATION_FILE` to override either path explicitly.
 
 When run from a deployed `production/backend/current`,
 `staging/backend/current`, or `test/backend/current` directory, the command

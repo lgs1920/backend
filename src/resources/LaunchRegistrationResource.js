@@ -18,6 +18,7 @@ export class LaunchRegistrationResource {
      * @param {object} options Resource configuration.
      * @param {LaunchRegistrationStore} [options.store] Injected store for tests or composition.
      * @param {string} [options.backendHome] Backend home used by the default store.
+     * @param {string} [options.registrationFile] Explicit launch-registration storage path.
      * @param {string[]} [options.allowedOrigins] Exact browser origins allowed to submit registrations.
      * @param {ContactMailService|null} [options.mailer] Optional shared form mail transport.
      * @param {ContactRateLimiter} [options.rateLimiter] Injected public registration limiter.
@@ -27,6 +28,7 @@ export class LaunchRegistrationResource {
         mailer = null,
         store = null,
         backendHome = undefined,
+        registrationFile = undefined,
         rateLimiter = new ContactRateLimiter({
             trustProxy: process.env.LGS1920_TRUST_PROXY === 'true',
         }),
@@ -35,7 +37,10 @@ export class LaunchRegistrationResource {
             throw new Error('app is undefined')
         }
 
-        this.store = store ?? new LaunchRegistrationStore({backendHome})
+        this.store = store ?? new LaunchRegistrationStore({
+            backendHome,
+            filePath: process.env.LGS1920_REGISTRATION_FILE || registrationFile,
+        })
         this.controller = new LaunchRegistrationController(this.store, {allowedOrigins, mailer, rateLimiter})
 
         app.post(LAUNCH_REGISTRATION_ROUTE, this.controller.register, {

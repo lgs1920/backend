@@ -41,9 +41,11 @@ LGS1920_PUBLIC_HTTPS=true
 LGS1920_MAX_READ_FILE_BYTES=5242880
 ```
 
-Use a different token, data directory, log destination, and backend port for
-each environment. Never copy a production token into staging, test, Studio,
-Site, Git, or a generated browser bundle.
+Use a different token, persistent data directory, log destination, and backend
+port for each environment. Launch-registration files belong in the private
+environment-specific `backend/shared` directory, outside versioned releases.
+Never copy a production token into staging, test, Studio, Site, Git, or a
+generated browser bundle.
 
 ## CORS policy
 

@@ -6,6 +6,7 @@ import {
     clearRegistrations,
     formatRegistrationRows,
     parseArguments,
+    readConfiguredRegistrationFile,
     readRegistrationFile,
     removeRegistrations,
     resolvePm2Configuration,
@@ -59,6 +60,23 @@ describe('launch registration administration command', () => {
             createdAt: '2026-08-10T12:00:00.000Z',
         }])
         expect(JSON.stringify(rows)).not.toContain('private-token-hash')
+    })
+
+    test('reads the persistent registration path from generated server configuration', async () => {
+        const home = await mkdtemp(path.join(os.tmpdir(), 'lgs1920-registration-config-'))
+        const configurationPath = path.join(home, 'servers.json')
+        try {
+            await writeFile(configurationPath, JSON.stringify({
+                backend: {
+                    registrationFile: '/home/www/lgs1920/production/backend/shared/launch-registrations.json',
+                },
+            }), 'utf8')
+            expect(readConfiguredRegistrationFile(configurationPath))
+                .toBe('/home/www/lgs1920/production/backend/shared/launch-registrations.json')
+        }
+        finally {
+            await rm(home, {recursive: true, force: true})
+        }
     })
 
     test('removes registrations by normalized email and preserves other records', async () => {
