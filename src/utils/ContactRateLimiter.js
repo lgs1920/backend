@@ -2,6 +2,8 @@ const DEFAULT_WINDOW_MS = 15 * 60 * 1000
 const DEFAULT_TOKEN_LIMIT = 10
 const DEFAULT_SEND_LIMIT = 5
 const DEFAULT_REGISTRATION_LIMIT = 5
+const DEFAULT_REGISTRATION_RESEND_LIMIT = 3
+const DEFAULT_REGISTRATION_CONFIRMATION_LIMIT = 10
 const DEFAULT_MAX_ENTRIES = 10_000
 
 /**
@@ -51,6 +53,8 @@ export class ContactRateLimiter {
      * @param {number} [options.tokenLimit] Maximum token requests per window.
      * @param {number} [options.sendLimit] Maximum message sends per window.
      * @param {number} [options.maxEntries] Maximum in-memory client buckets.
+     * @param {number} [options.registrationResendLimit] Maximum confirmation resend requests per window.
+     * @param {number} [options.registrationConfirmationLimit] Maximum confirmation requests per window.
      * @param {boolean} [options.trustProxy=false] Trust the first X-Forwarded-For address.
      * @param {() => number} [options.clock] Clock returning epoch milliseconds.
      * @param {(context: object) => string} [options.getClientKey] Optional client-key resolver.
@@ -60,6 +64,8 @@ export class ContactRateLimiter {
         tokenLimit = DEFAULT_TOKEN_LIMIT,
         sendLimit = DEFAULT_SEND_LIMIT,
         registrationLimit = DEFAULT_REGISTRATION_LIMIT,
+        registrationResendLimit = DEFAULT_REGISTRATION_RESEND_LIMIT,
+        registrationConfirmationLimit = DEFAULT_REGISTRATION_CONFIRMATION_LIMIT,
         maxEntries = DEFAULT_MAX_ENTRIES,
         trustProxy = false,
         clock = () => Date.now(),
@@ -69,6 +75,8 @@ export class ContactRateLimiter {
         this.tokenLimit = readPositiveInteger(tokenLimit, 'tokenLimit', DEFAULT_TOKEN_LIMIT)
         this.sendLimit = readPositiveInteger(sendLimit, 'sendLimit', DEFAULT_SEND_LIMIT)
         this.registrationLimit = readPositiveInteger(registrationLimit, 'registrationLimit', DEFAULT_REGISTRATION_LIMIT)
+        this.registrationResendLimit = readPositiveInteger(registrationResendLimit, 'registrationResendLimit', DEFAULT_REGISTRATION_RESEND_LIMIT)
+        this.registrationConfirmationLimit = readPositiveInteger(registrationConfirmationLimit, 'registrationConfirmationLimit', DEFAULT_REGISTRATION_CONFIRMATION_LIMIT)
         this.maxEntries = readPositiveInteger(maxEntries, 'maxEntries', DEFAULT_MAX_ENTRIES)
         this.trustProxy = trustProxy === true
         this.clock = clock
@@ -101,7 +109,7 @@ export class ContactRateLimiter {
     /**
      * Consume one request from a scoped client bucket.
      *
-     * @param {'token'|'send'|'registration'} scope Endpoint scope.
+     * @param {'token'|'send'|'registration'|'registration-resend'|'registration-confirmation'} scope Endpoint scope.
      * @param {object} context Elysia request context.
      * @returns {{retryAfterSeconds: number}|null} Rate-limit result, or null when allowed.
      */
@@ -112,6 +120,10 @@ export class ContactRateLimiter {
                 ? this.sendLimit
                 : scope === 'registration'
                     ? this.registrationLimit
+                    : scope === 'registration-resend'
+                        ? this.registrationResendLimit
+                        : scope === 'registration-confirmation'
+                            ? this.registrationConfirmationLimit
                     : 0
         if (!limit) {
             throw new TypeError('Unknown contact rate-limit scope')
@@ -141,12 +153,12 @@ export class ContactRateLimiter {
     /**
      * Reset one client bucket after an administrative state change.
      *
-     * @param {'token'|'send'|'registration'} scope Endpoint scope.
+     * @param {'token'|'send'|'registration'|'registration-resend'|'registration-confirmation'} scope Endpoint scope.
      * @param {object} context Request context used to resolve the client.
      * @returns {void}
      */
     reset = (scope, context) => {
-        if (!['token', 'send', 'registration'].includes(scope)) {
+        if (!['token', 'send', 'registration', 'registration-resend', 'registration-confirmation'].includes(scope)) {
             throw new TypeError('Unknown contact rate-limit scope')
         }
 

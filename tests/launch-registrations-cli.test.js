@@ -98,7 +98,7 @@ describe('launch registration administration command', () => {
         const {home, filePath} = await createDataFile([registration('ada@example.com')])
         try {
             expect(await clearRegistrations(filePath)).toEqual({removed: 1})
-            expect(JSON.parse(await readFile(filePath, 'utf8'))).toEqual({schemaVersion: 2, registrations: []})
+            expect(JSON.parse(await readFile(filePath, 'utf8'))).toEqual({schemaVersion: 3, registrations: []})
         }
         finally {
             await rm(home, {recursive: true, force: true})

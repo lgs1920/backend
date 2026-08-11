@@ -21,7 +21,7 @@
 // build.js
 import argparse         from 'argparse'
 import { execSync }     from 'child_process'
-import { copyFileSync } from 'node:fs'
+import { copyFileSync, cpSync, mkdirSync } from 'node:fs'
 
 /**
  * Get arguments
@@ -56,3 +56,8 @@ execSync(`bun build ${minify} --outdir=${buildDirectory} --target=bun src/index.
 execSync(`bun build ${minify} --target=bun scripts/launch-registrations-cli.js --outfile=${buildDirectory}/launch-registrations.js`)
 execSync(`bun build ${minify} --target=bun scripts/backend-process-cli.js --outfile=${buildDirectory}/backend-process.js`)
 copyFileSync('package.json', `${buildDirectory}/package.json`)
+mkdirSync(`${buildDirectory}/messages/forms`, {recursive: true})
+copyFileSync('messages/forms/en.md', `${buildDirectory}/messages/forms/en.md`)
+copyFileSync('messages/forms/fr.md', `${buildDirectory}/messages/forms/fr.md`)
+cpSync('messages/forms/contact', `${buildDirectory}/messages/forms/contact`, {recursive: true})
+cpSync('messages/forms/support/contact', `${buildDirectory}/messages/forms/support/contact`, {recursive: true})

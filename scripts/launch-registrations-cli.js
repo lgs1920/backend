@@ -9,6 +9,7 @@ import {stdin as input, stdout as output} from 'node:process'
 import {LAUNCH_REGISTRATION_DATA_PATH, LAUNCH_REGISTRATION_SCHEMA_VERSION} from '../src/services/LaunchRegistrationStore.js'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const SUPPORTED_SCHEMA_VERSIONS = [1, 2, LAUNCH_REGISTRATION_SCHEMA_VERSION]
 const execFileAsync = promisify(execFile)
 
 /**
@@ -240,7 +241,7 @@ export const readRegistrationFile = async (filePath) => {
         throw new Error(`Registration data is not valid JSON: ${filePath}`, {cause: error})
     }
 
-    if (!persisted || typeof persisted !== 'object' || ![1, LAUNCH_REGISTRATION_SCHEMA_VERSION].includes(persisted.schemaVersion) || !Array.isArray(persisted.registrations)) {
+    if (!persisted || typeof persisted !== 'object' || !SUPPORTED_SCHEMA_VERSIONS.includes(persisted.schemaVersion) || !Array.isArray(persisted.registrations)) {
         throw new Error(`Registration data has an invalid format: ${filePath}`)
     }
 

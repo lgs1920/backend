@@ -55,6 +55,14 @@ const SITE_CANCELLATION_ROUTES = {
     en: '/registration/revoke/',
     fr: '/fr/registration/revoke/',
 }
+const SITE_CONFIRMATION_ROUTES = {
+    en: '/registration/confirm/',
+    fr: '/fr/registration/confirm/',
+}
+const REGISTRATION_CONFIRMATION_SUBJECTS = {
+    en: '[LGS1920] Confirm your registration',
+    fr: '[LGS1920] Confirmez votre inscription',
+}
 const markdownRenderer = new MarkdownIt({html: false, breaks: true, linkify: true})
 
 const normalizePublicOrigin = (value) => {
@@ -89,6 +97,30 @@ const buildRegistrationCancellationUrl = ({sitePublicUrl, registrationId, cancel
     const url = new URL(SITE_CANCELLATION_ROUTES[locale === 'fr' ? 'fr' : 'en'], `${publicOrigin}/`)
     url.searchParams.set('id', registrationId.trim())
     url.searchParams.set('token', cancellationToken.trim())
+    url.searchParams.set('locale', locale === 'fr' ? 'fr' : 'en')
+    return url.toString()
+}
+
+/**
+ * Build the public Site URL for one pending launch-registration confirmation.
+ *
+ * @param {object} options URL options.
+ * @param {string} options.sitePublicUrl Public Site origin.
+ * @param {string} options.registrationId Pending registration identifier.
+ * @param {string} options.confirmationToken Raw single-use confirmation token.
+ * @param {'en'|'fr'} options.locale Link locale.
+ * @returns {string} Public confirmation URL.
+ * @throws {ContactMailConfigurationError} If the public URL or token data is invalid.
+ */
+const buildRegistrationConfirmationUrl = ({sitePublicUrl, registrationId, confirmationToken, locale}) => {
+    const publicOrigin = normalizePublicOrigin(sitePublicUrl)
+    if (!publicOrigin || typeof registrationId !== 'string' || !registrationId.trim() || typeof confirmationToken !== 'string' || !confirmationToken.trim()) {
+        throw new ContactMailConfigurationError('Registration confirmation URL is not configured')
+    }
+
+    const url = new URL(SITE_CONFIRMATION_ROUTES[locale === 'fr' ? 'fr' : 'en'], `${publicOrigin}/`)
+    url.searchParams.set('id', registrationId.trim())
+    url.searchParams.set('token', confirmationToken.trim())
     url.searchParams.set('locale', locale === 'fr' ? 'fr' : 'en')
     return url.toString()
 }
@@ -257,31 +289,34 @@ const appendLogoFooter = (message, origin) => {
 }
 
 /**
- * Append the single-use launch registration cancellation link.
- *
- * @param {string} message Mail body in Markdown.
- * @param {'en'|'fr'} locale Mail locale.
- * @param {string} cancellationUrl Private backend cancellation URL.
- * @returns {string} Mail body with the cancellation link.
- */
-const appendCancellationLink = (message, locale, cancellationUrl) => {
-    const linkLabel = locale === 'fr'
-        ? 'Demander l’annulation de l’inscription'
-        : 'Cancel this registration'
-    return `${message.trim()}\n\n[${linkLabel}](${cancellationUrl})`
-}
-
-/**
  * Replace the client template's single-use registration URL placeholder.
  *
  * @param {string} message Markdown message content.
- * @param {string} locale Message locale.
  * @param {string} cancellationUrl Signed cancellation URL.
  * @returns {string} Message with the cancellation URL applied.
  */
-const applyCancellationUrlPlaceholder = (message, locale, cancellationUrl) => message.includes('{{revoke-url}}')
-    ? message.replaceAll('{{revoke-url}}', cancellationUrl)
-    : appendCancellationLink(message, locale, cancellationUrl)
+const applyCancellationUrlPlaceholder = (message, cancellationUrl) => {
+    if (!message.includes('{{revoke-url}}')) {
+        throw new ContactMailValidationError('Rendered launch registration message must contain {{revoke-url}}')
+    }
+
+    return message.replaceAll('{{revoke-url}}', cancellationUrl)
+}
+
+/**
+ * Append or replace the single-use launch registration confirmation link.
+ *
+ * @param {string} message Markdown message content.
+ * @param {string} confirmationUrl Signed confirmation URL.
+ * @returns {string} Message with the confirmation URL applied.
+ */
+const applyConfirmationUrlPlaceholder = (message, confirmationUrl) => {
+    if (!message.includes('{{confirm-url}}')) {
+        throw new ContactMailValidationError('Rendered launch registration message must contain {{confirm-url}}')
+    }
+
+    return message.replaceAll('{{confirm-url}}', confirmationUrl)
+}
 
 /**
  * Convert Markdown content to safe HTML for an email body.
@@ -293,20 +328,24 @@ const renderMailHtml = (message) => markdownRenderer.render(message)
     .replaceAll(PRODUCTION_LOGO_MARKUP, PRODUCTION_LOGO_HTML)
 
 /**
- * Load and interpolate the fixed Markdown fallback for a validated form.
+ * Load and interpolate the fixed Markdown fallback for a validated contact form.
  *
- * @param {string} templateDirectory Directory containing one Markdown fallback per locale.
+ * @param {string} templateDirectory Directory containing contact-form Markdown fallbacks.
  * @param {object} form Normalized form message.
  * @param {'acknowledgement'|'support'} [audience='acknowledgement'] Template audience.
  * @returns {Promise<string>} Interpolated Markdown message without the shared footer.
  * @throws {ContactMailConfigurationError} If the fallback file is unavailable or invalid.
  */
 const loadDefaultFormMessage = async (templateDirectory, form, audience = 'acknowledgement') => {
+    if (form.form !== 'contact') {
+        throw new ContactMailConfigurationError('Default form message is unavailable')
+    }
+
     let template
     const templatePaths = audience === 'support'
-        ? [path.join(templateDirectory, 'support', form.form, `${form.locale}.md`)]
+        ? [path.join(templateDirectory, 'support', 'contact', `${form.locale}.md`)]
         : [
-            path.join(templateDirectory, form.form, `${form.locale}.md`),
+            path.join(templateDirectory, 'contact', `${form.locale}.md`),
             path.join(templateDirectory, `${form.locale}.md`),
         ]
     for (const templatePath of templatePaths) {
@@ -331,7 +370,6 @@ const loadDefaultFormMessage = async (templateDirectory, form, audience = 'ackno
 }
 
 /**
-/**
  * Send support notifications and client acknowledgements through the SMTP relay.
  */
 export class ContactMailService {
@@ -339,8 +377,8 @@ export class ContactMailService {
      * @param {object} options Service options.
      * @param {object} [options.env=process.env] Environment-like configuration.
      * @param {object} [options.transporter] Injected nodemailer transport for tests.
-     * @param {string} [options.templateDirectory] Fixed directory containing acknowledgement and support Markdown fallbacks.
-     * @param {string} [options.sitePublicUrl] Public site origin used by registration cancellation links.
+     * @param {string} [options.templateDirectory] Fixed directory containing contact acknowledgement and support Markdown fallbacks.
+     * @param {string} [options.sitePublicUrl] Public site origin used by registration confirmation and cancellation links.
      */
     constructor({env = process.env, templateDirectory = path.join(process.cwd(), 'messages', 'forms'), transporter = null, sitePublicUrl = undefined} = {}) {
         this.env = env
@@ -425,6 +463,68 @@ export class ContactMailService {
     }
 
     /**
+     * Send one launch-registration confirmation request to the visitor.
+     *
+     * @param {*} payload Raw launch-registration request body.
+     * @param {object} options Confirmation-link options.
+     * @param {string} options.registrationId Pending registration identifier.
+     * @param {string} options.confirmationToken Raw single-use confirmation token.
+     * @returns {Promise<{success: boolean, sent: boolean}>} Public-safe delivery result.
+     * @throws {ContactMailValidationError} If the launch-registration payload is invalid.
+     * @throws {ContactMailConfigurationError} If the target or public URL is unavailable.
+     * @throws {ContactMailDeliveryError} If SMTP delivery fails.
+     */
+    sendConfirmation = async (payload, {registrationId, confirmationToken} = {}) => {
+        if (isHoneypotFilled(payload)) {
+            return {success: true, sent: false}
+        }
+
+        const contact = normalizeLaunchRegistrationMessage(payload)
+        const {recipient, sender} = this.getConfiguredAddresses(contact.to)
+        const transporter = this.transporter ?? this.createTransport(recipient)
+        const visitorName = stripControlCharacters(`${contact.firstName} ${contact.lastName}`)
+        if (!contact.renderedMessage) {
+            throw new ContactMailValidationError('Rendered launch registration confirmation is required')
+        }
+        const confirmationMessage = contact.renderedMessage
+        const confirmationUrl = buildRegistrationConfirmationUrl({
+            sitePublicUrl:      this.sitePublicUrl,
+            registrationId,
+            confirmationToken,
+            locale:             contact.locale,
+        })
+        const clientMessage = applyConfirmationUrlPlaceholder(confirmationMessage, confirmationUrl)
+        const clientText = appendLogoFooter(clientMessage, this.logoPublicUrl)
+        const clientHtml = renderMailHtml(clientText)
+
+        try {
+            await transporter.sendMail({
+                from:    {
+                    name:    'LGS1920 Studio',
+                    address: sender,
+                },
+                to:      {
+                    name:    visitorName,
+                    address: contact.email,
+                },
+                envelope: {
+                    from: sender,
+                    to:   contact.email,
+                },
+                replyTo: recipient,
+                subject: REGISTRATION_CONFIRMATION_SUBJECTS[contact.locale],
+                text:    clientText,
+                html:    clientHtml,
+            })
+        }
+        catch (error) {
+            throw new ContactMailDeliveryError('Unable to deliver launch registration confirmation', error)
+        }
+
+        return {success: true, sent: true}
+    }
+
+    /**
      * Send the site-rendered support notification and a separate client acknowledgement.
      *
      * @param {*} payload Raw public request body.
@@ -449,12 +549,15 @@ export class ContactMailService {
             ? `${subjectPrefix} ${contact.subject}`
             : `${subjectPrefix} submission`
         const visitorName = stripControlCharacters(`${contact.firstName} ${contact.lastName}`)
-        const acknowledgementMessage = contact.renderedMessage
+        const acknowledgementMessage = contact.form === 'launch-registration'
             ? contact.renderedMessage
-            : await loadDefaultFormMessage(this.templateDirectory, contact, 'acknowledgement')
-        const supportMessage = contact.supportRenderedMessage
+            : contact.renderedMessage ?? await loadDefaultFormMessage(this.templateDirectory, contact, 'acknowledgement')
+        const supportMessage = contact.form === 'launch-registration'
             ? contact.supportRenderedMessage
-            : await loadDefaultFormMessage(this.templateDirectory, contact, 'support')
+            : contact.supportRenderedMessage ?? await loadDefaultFormMessage(this.templateDirectory, contact, 'support')
+        if (contact.form === 'launch-registration' && (!acknowledgementMessage || !supportMessage)) {
+            throw new ContactMailValidationError('Rendered launch registration acknowledgement and support messages are required')
+        }
         const cancellationUrl = contact.form === 'launch-registration'
             ? buildRegistrationCancellationUrl({
                 sitePublicUrl:     this.sitePublicUrl,
@@ -464,7 +567,7 @@ export class ContactMailService {
             })
             : null
         const clientMessage = contact.form === 'launch-registration'
-            ? applyCancellationUrlPlaceholder(acknowledgementMessage, contact.locale, cancellationUrl)
+            ? applyCancellationUrlPlaceholder(acknowledgementMessage, cancellationUrl)
             : acknowledgementMessage
         const supportText = appendLogoFooter(supportMessage, this.logoPublicUrl)
         const supportHtml = renderMailHtml(supportText)

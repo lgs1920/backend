@@ -190,8 +190,9 @@ new CloudAuthResource(app)
 new JourneyImportResource(app)
 new LaunchRegistrationResource(app, {
     allowedOrigins,
-    backendHome: configuration.backend.home,
-    registrationFile: configuration.backend.registrationFile,
+    backendHome:             configuration.backend.home,
+    registrationFile:        configuration.backend.registrationFile,
+    pendingRegistrationFile: configuration.backend.pendingRegistrationFile,
     mailer,
 })
 new ContactMailResource(app, {

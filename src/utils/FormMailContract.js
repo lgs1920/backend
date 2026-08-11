@@ -7,6 +7,8 @@ const LOCALE_PATTERN = /^[a-z]{2}(?:-[a-z]{2})?$/
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/
 const UNRESOLVED_PLACEHOLDER_PATTERN = /{{[\s\S]*?}}/
 const REVOKE_URL_PLACEHOLDER = '{{revoke-url}}'
+const CONFIRM_URL_PLACEHOLDER = '{{confirm-url}}'
+const REGISTRATION_URL_PLACEHOLDERS = new Set([REVOKE_URL_PLACEHOLDER, CONFIRM_URL_PLACEHOLDER])
 
 /**
  * Normalize and validate form metadata shared by browser form mail requests.
@@ -47,11 +49,12 @@ export const normalizeFormMailMetadata = (payload, {defaultForm, expectedForm = 
      *
      * @param {*} value Raw rendered message.
      * @param {object} [options] Validation options.
-     * @param {boolean} [options.allowRevokeUrl=false] Allow the launch acknowledgement placeholder.
+     * @param {boolean} [options.allowRevokeUrl=false] Allow launch registration URL placeholders for backwards compatibility.
+     * @param {boolean} [options.allowRegistrationUrl=false] Allow launch registration confirmation and cancellation URL placeholders.
      * @returns {string|null} Bounded rendered message or null when omitted.
      * @throws {Error} If the rendered message is invalid.
      */
-    const normalizeRenderedMessage = (value, {allowRevokeUrl = false} = {}) => {
+    const normalizeRenderedMessage = (value, {allowRevokeUrl = false, allowRegistrationUrl = false} = {}) => {
         if (value === undefined || value === null || value === '') {
             return null
         }
@@ -64,9 +67,9 @@ export const normalizeFormMailMetadata = (payload, {defaultForm, expectedForm = 
             throw new Error('Invalid rendered form message')
         }
         const unresolvedPlaceholders = renderedMessage.match(new RegExp(UNRESOLVED_PLACEHOLDER_PATTERN.source, 'g')) ?? []
-        const onlyAllowedLaunchPlaceholder = allowRevokeUrl && form === 'launch-registration'
+        const onlyAllowedLaunchPlaceholder = (allowRevokeUrl || allowRegistrationUrl) && form === 'launch-registration'
             && unresolvedPlaceholders.length > 0
-            && unresolvedPlaceholders.every(placeholder => placeholder === REVOKE_URL_PLACEHOLDER)
+            && unresolvedPlaceholders.every(placeholder => REGISTRATION_URL_PLACEHOLDERS.has(placeholder))
         if (CONTROL_CHARACTER_PATTERN.test(renderedMessage) || (UNRESOLVED_PLACEHOLDER_PATTERN.test(renderedMessage) && !onlyAllowedLaunchPlaceholder)) {
             throw new Error('Invalid rendered form message')
         }
