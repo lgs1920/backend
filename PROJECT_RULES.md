@@ -30,6 +30,8 @@ This is the canonical source for the LGS1920 backend AI-agent and development ru
 - Keep route registration, controller behavior, and reusable utilities separate.
 - Keep OpenAPI metadata, CORS headers, response envelopes, and client-facing route constants synchronized with the API implementation.
 - Do not introduce another backend framework, ORM, persistence layer, or process manager without explicit approval.
+- **Site-owned launch-registration mail:** The Site owns every localized launch-registration mail catalog, including the initial confirmation, resend confirmation, post-confirmation acknowledgement, and Studio notification. The backend must not add, load, or use launch-registration message templates or fallback files. It may validate Site-rendered bodies and replace only the signed `{{confirm-url}}` and `{{revoke-url}}` placeholders.
+- Launch-registration `renderedMessage` and `supportRenderedMessage` values are transient request data. Never persist them; resend and post-confirmation delivery must receive fresh Site-rendered values in the corresponding request.
 
 ## 4. Security and reliability
 

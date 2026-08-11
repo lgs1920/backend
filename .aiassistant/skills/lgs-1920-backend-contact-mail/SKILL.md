@@ -9,6 +9,12 @@ Use this skill for changes to the backend contact form flow. The backend is the 
 place that may know SMTP credentials or recipient addresses; the public site sends
 an opaque target key and never receives mail secrets.
 
+Launch-registration mail catalogs are Site-owned. The backend must not add, load,
+package, or use launch-registration templates or fallback messages. The Site sends
+fresh rendered confirmation, resend, post-confirmation, and Studio-notification
+bodies with the corresponding request; `renderedMessage` and
+`supportRenderedMessage` are transient and must never be persisted.
+
 ## Workflow
 
 1. Read `PROJECT_RULES.md`, then inspect `src/resources/ContactMailResource.js`,
@@ -16,7 +22,10 @@ an opaque target key and never receives mail secrets.
    `src/utils/ContactRequestSecurity.js`, and `src/utils/ContactRateLimiter.js`.
 2. Preserve the API contract in `docs/CONTACT-API.md`: exact allowed origins,
    short-lived signed token, bounded fields, honeypot handling, opaque target key,
-   generic error responses, and HTTP 429 behavior.
+   generic error responses, HTTP 429 behavior, and the Site-owned launch-registration
+   mail contract. For launch-registration mail, only replace the signed
+   `{{confirm-url}}` and `{{revoke-url}}` placeholders; do not synthesize or append
+   a backend message.
 3. Keep SMTP configuration server-only. Use `backend/.env` locally, keep it ignored,
    and never print or commit its values. Add a target as an opaque mapping such as
    `LGS1920_CONTACT_TARGET_C4P7Z2=support@lgs1920.fr`; do not expose the address in

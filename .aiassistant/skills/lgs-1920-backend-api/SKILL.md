@@ -7,6 +7,11 @@ description: Maintain LGS1920 backend HTTP APIs built with Bun and Elysia, inclu
 
 Use this skill for any change to the backend HTTP surface. Keep the existing resource/controller split and inspect the route registration, configuration, and client consumer before editing.
 
+For launch-registration routes, keep message ownership in the Site: the backend
+has no launch-registration templates or fallback messages. Mail-triggering requests
+must carry fresh Site-rendered bodies, and the backend must not persist
+`renderedMessage` or `supportRenderedMessage`.
+
 ## Workflow
 
 1. Locate the route constant, resource, controller, related utility, and consuming Studio request before changing behavior.
@@ -14,8 +19,10 @@ Use this skill for any change to the backend HTTP surface. Keep the existing res
 3. Validate query parameters, path parameters, JSON, multipart data, and remote URLs at the HTTP boundary.
 4. Use the existing Bun-native APIs and Elysia instance. Do not introduce a second server framework or bypass the resource registration path.
 5. Keep OpenAPI metadata synchronized with the actual route contract and preserve CORS requirements for the Studio client.
-6. Return safe client errors without exposing filesystem paths, provider tokens, FFmpeg commands, or stack traces.
-7. Add focused route or controller tests when behavior changes. Prefer extracting an app factory if importing `src/index.js` would start a server during tests.
+6. For launch-registration mail, validate the Site-rendered body and replace only
+   its signed `{{confirm-url}}` or `{{revoke-url}}` placeholder.
+7. Return safe client errors without exposing filesystem paths, provider tokens, FFmpeg commands, or stack traces.
+8. Add focused route or controller tests when behavior changes. Prefer extracting an app factory if importing `src/index.js` would start a server during tests.
 
 ## Backend conventions
 
