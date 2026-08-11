@@ -107,7 +107,13 @@ List registrations without exposing cancellation token hashes:
 
 ```bash
 bun run registrations --list
+bun run registrations --list --confirmed
+bun run registrations --list --pending
 ```
+
+`--list` and `--list --confirmed` read the confirmed-registration file.
+`--list --pending` reads `launch-registrations-pending.json` and includes the
+confirmation sent and expiration dates. No token hashes are displayed.
 
 Remove one registration by email address:
 

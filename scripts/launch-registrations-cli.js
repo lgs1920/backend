@@ -31,13 +31,13 @@ export class LaunchRegistrationCliUsageError extends Error {
  * Parse the launch-registration administration command arguments.
  *
  * @param {string[]} args Command-line arguments excluding the executable.
- * @returns {{action: 'list'|'remove'|'clear'|'help', email: string|null, confirmed: boolean, clearScope: 'confirmed'|'pending'|'all'|null}} Parsed arguments.
+ * @returns {{action: 'list'|'remove'|'clear'|'help', email: string|null, confirmed: boolean, scope: 'confirmed'|'pending'|'all'|null}} Parsed arguments.
  */
 export const parseArguments = (args = []) => {
     let action = null
     let email = null
     let confirmed = false
-    let clearScope = null
+    let scope = null
 
     const setAction = nextAction => {
         if (action && action !== nextAction) {
@@ -54,10 +54,10 @@ export const parseArguments = (args = []) => {
         }
         if (['--all', '--confirmed', '--pending'].includes(argument)) {
             const requestedScope = argument.slice(2)
-            if (clearScope && clearScope !== requestedScope) {
-                throw new LaunchRegistrationCliUsageError('Choose only one clear scope: --confirmed, --pending, or --all')
+            if (scope && scope !== requestedScope) {
+                throw new LaunchRegistrationCliUsageError('Choose only one scope: --confirmed, --pending, or --all')
             }
-            clearScope = requestedScope
+            scope = requestedScope
             continue
         }
         if (argument === '--help' || argument === '-h') {
@@ -93,18 +93,21 @@ export const parseArguments = (args = []) => {
     }
 
     const resolvedAction = action ?? 'help'
-    if (clearScope && resolvedAction !== 'clear') {
-        throw new LaunchRegistrationCliUsageError('--confirmed, --pending, and --all can only be used with clear')
+    if (scope && !['clear', 'list'].includes(resolvedAction)) {
+        throw new LaunchRegistrationCliUsageError('--confirmed, --pending, and --all can only be used with clear or list')
     }
-    if (resolvedAction === 'clear' && !clearScope) {
-        clearScope = 'confirmed'
+    if (scope === 'all' && resolvedAction === 'list') {
+        throw new LaunchRegistrationCliUsageError('--all can only be used with clear')
+    }
+    if (['clear', 'list'].includes(resolvedAction) && !scope) {
+        scope = 'confirmed'
     }
 
     return {
         action: resolvedAction,
         email:  email?.trim().toLowerCase() || null,
         confirmed,
-        clearScope,
+        scope,
     }
 }
 
@@ -328,6 +331,21 @@ export const formatRegistrationRows = (registrations) => registrations.map(regis
 }))
 
 /**
+ * Convert pending registrations into safe administrative list rows.
+ *
+ * @param {object[]} registrations Persisted pending registrations.
+ * @returns {object[]} Rows without confirmation token hashes.
+ */
+export const formatPendingRegistrationRows = (registrations) => registrations.map(registration => ({
+    firstName:          registration.firstName,
+    lastName:           registration.lastName,
+    email:              registration.email,
+    createdAt:          registration.createdAt,
+    confirmationSentAt: registration.confirmationSentAt,
+    expiresAt:          registration.expiresAt,
+}))
+
+/**
  * Remove all registrations matching one normalized email address.
  *
  * @param {string} filePath Registration data path.
@@ -420,7 +438,7 @@ export const clearByScope = async (scope, registrationFile, pendingFile) => {
 }
 
 const printHelp = () => {
-    console.log('Usage: bun launch-registrations.js --list')
+    console.log('Usage: bun launch-registrations.js --list [--confirmed|--pending]')
     console.log('       bun launch-registrations.js --remove <email> [--yes]')
     console.log('       bun launch-registrations.js clear [--confirmed|--pending|--all] [--yes]')
     console.log('')
@@ -457,10 +475,14 @@ export const run = async (args = process.argv.slice(2)) => {
 
     const filePath = resolveRegistrationFile()
     if (options.action === 'list') {
-        const persisted = await readRegistrationFile(filePath)
-        const rows = formatRegistrationRows(persisted.registrations)
+        const pending = options.scope === 'pending'
+        const registrationFile = pending ? resolvePendingRegistrationFile(filePath) : filePath
+        const persisted = await readRegistrationFile(registrationFile)
+        const rows = pending
+            ? formatPendingRegistrationRows(persisted.registrations)
+            : formatRegistrationRows(persisted.registrations)
         if (rows.length === 0) {
-            console.log('No registrations.')
+            console.log(pending ? 'No pending registrations.' : 'No confirmed registrations.')
             return
         }
         console.table(rows)
@@ -484,26 +506,26 @@ export const run = async (args = process.argv.slice(2)) => {
     }
 
     const pendingFilePath = resolvePendingRegistrationFile(filePath)
-    const counts = await readClearCounts(options.clearScope, filePath, pendingFilePath)
+    const counts = await readClearCounts(options.scope, filePath, pendingFilePath)
     const confirmedCount = counts.confirmed
     const pendingCount = counts.pending
     if (confirmedCount === 0 && pendingCount === 0) {
         console.log('No registrations to delete.')
         return
     }
-    const question = options.clearScope === 'all'
+    const question = options.scope === 'all'
         ? `Delete all ${confirmedCount} confirmed and ${pendingCount} pending registrations?`
-        : options.clearScope === 'pending'
+        : options.scope === 'pending'
             ? `Delete all ${pendingCount} pending registrations?`
             : `Delete all ${confirmedCount} confirmed registrations?`
     if (!options.confirmed && !await confirm(question)) {
         console.log('Deletion cancelled.')
         return
     }
-    const result = await withBackendStopped(() => clearByScope(options.clearScope, filePath, pendingFilePath))
-    const deleted = options.clearScope === 'all'
+    const result = await withBackendStopped(() => clearByScope(options.scope, filePath, pendingFilePath))
+    const deleted = options.scope === 'all'
         ? `${result.confirmed} confirmed registration(s) and ${result.pending} pending registration(s)`
-        : options.clearScope === 'pending'
+        : options.scope === 'pending'
             ? `${result.pending} pending registration(s)`
             : `${result.confirmed} confirmed registration(s)`
     console.log(`${deleted} deleted.`)

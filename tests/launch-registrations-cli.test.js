@@ -5,6 +5,7 @@ import path from 'node:path'
 import {
     clearRegistrations,
     clearByScope,
+    formatPendingRegistrationRows,
     formatRegistrationRows,
     parseArguments,
     readConfiguredRegistrationFile,
@@ -33,17 +34,20 @@ const registration = (email, firstName = 'Ada') => ({
 
 describe('launch registration administration command', () => {
     test('parses list, remove, clear, and confirmation options', () => {
-        expect(parseArguments(['--list'])).toEqual({action: 'list', email: null, confirmed: false, clearScope: null})
-        expect(parseArguments(['--remove', 'ADA@example.com', '--yes'])).toEqual({action: 'remove', email: 'ada@example.com', confirmed: true, clearScope: null})
-        expect(parseArguments(['clear'])).toEqual({action: 'clear', email: null, confirmed: false, clearScope: 'confirmed'})
-        expect(parseArguments(['clear', '--confirmed'])).toEqual({action: 'clear', email: null, confirmed: false, clearScope: 'confirmed'})
-        expect(parseArguments(['clear', '--pending'])).toEqual({action: 'clear', email: null, confirmed: false, clearScope: 'pending'})
-        expect(parseArguments(['--clear', '--all', '--yes'])).toEqual({action: 'clear', email: null, confirmed: true, clearScope: 'all'})
+        expect(parseArguments(['--list'])).toEqual({action: 'list', email: null, confirmed: false, scope: 'confirmed'})
+        expect(parseArguments(['--list', '--pending'])).toEqual({action: 'list', email: null, confirmed: false, scope: 'pending'})
+        expect(parseArguments(['--list', '--confirmed'])).toEqual({action: 'list', email: null, confirmed: false, scope: 'confirmed'})
+        expect(parseArguments(['--remove', 'ADA@example.com', '--yes'])).toEqual({action: 'remove', email: 'ada@example.com', confirmed: true, scope: null})
+        expect(parseArguments(['clear'])).toEqual({action: 'clear', email: null, confirmed: false, scope: 'confirmed'})
+        expect(parseArguments(['clear', '--confirmed'])).toEqual({action: 'clear', email: null, confirmed: false, scope: 'confirmed'})
+        expect(parseArguments(['clear', '--pending'])).toEqual({action: 'clear', email: null, confirmed: false, scope: 'pending'})
+        expect(parseArguments(['--clear', '--all', '--yes'])).toEqual({action: 'clear', email: null, confirmed: true, scope: 'all'})
     })
 
-    test('accepts clear scope options only with the clear action', () => {
-        expect(() => parseArguments(['--pending', '--list'])).toThrow('--confirmed, --pending, and --all can only be used with clear')
-        expect(() => parseArguments(['clear', '--pending', '--all'])).toThrow('Choose only one clear scope')
+    test('accepts data scope options only with list or clear actions', () => {
+        expect(() => parseArguments(['--pending', '--remove', 'ada@example.com'])).toThrow('--confirmed, --pending, and --all can only be used with clear or list')
+        expect(() => parseArguments(['--list', '--all'])).toThrow('--all can only be used with clear')
+        expect(() => parseArguments(['clear', '--pending', '--all'])).toThrow('Choose only one scope')
     })
 
     test('detects PM2 only for deployed backend paths', () => {
@@ -68,6 +72,23 @@ describe('launch registration administration command', () => {
             lastName:  'Lovelace',
             email:     'ada@example.com',
             createdAt: '2026-08-10T12:00:00.000Z',
+        }])
+        expect(JSON.stringify(rows)).not.toContain('private-token-hash')
+    })
+
+    test('formats pending list rows with expiry without private token hashes', () => {
+        const rows = formatPendingRegistrationRows([{
+            ...registration('ada@example.com'),
+            confirmationSentAt: '2026-08-10T12:01:00.000Z',
+            expiresAt:          '2026-08-12T12:01:00.000Z',
+        }])
+        expect(rows).toEqual([{
+            firstName:          'Ada',
+            lastName:           'Lovelace',
+            email:              'ada@example.com',
+            createdAt:          '2026-08-10T12:00:00.000Z',
+            confirmationSentAt: '2026-08-10T12:01:00.000Z',
+            expiresAt:          '2026-08-12T12:01:00.000Z',
         }])
         expect(JSON.stringify(rows)).not.toContain('private-token-hash')
     })
