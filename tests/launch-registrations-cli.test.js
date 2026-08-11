@@ -4,11 +4,13 @@ import os from 'node:os'
 import path from 'node:path'
 import {
     clearRegistrations,
+    clearByScope,
     formatRegistrationRows,
     parseArguments,
     readConfiguredRegistrationFile,
     readRegistrationFile,
     removeRegistrations,
+    resolvePendingRegistrationFile,
     resolvePm2Configuration,
 } from '../scripts/launch-registrations-cli.js'
 
@@ -31,9 +33,17 @@ const registration = (email, firstName = 'Ada') => ({
 
 describe('launch registration administration command', () => {
     test('parses list, remove, clear, and confirmation options', () => {
-        expect(parseArguments(['--list'])).toEqual({action: 'list', email: null, confirmed: false})
-        expect(parseArguments(['--remove', 'ADA@example.com', '--yes'])).toEqual({action: 'remove', email: 'ada@example.com', confirmed: true})
-        expect(parseArguments(['clear'])).toEqual({action: 'clear', email: null, confirmed: false})
+        expect(parseArguments(['--list'])).toEqual({action: 'list', email: null, confirmed: false, clearScope: null})
+        expect(parseArguments(['--remove', 'ADA@example.com', '--yes'])).toEqual({action: 'remove', email: 'ada@example.com', confirmed: true, clearScope: null})
+        expect(parseArguments(['clear'])).toEqual({action: 'clear', email: null, confirmed: false, clearScope: 'confirmed'})
+        expect(parseArguments(['clear', '--confirmed'])).toEqual({action: 'clear', email: null, confirmed: false, clearScope: 'confirmed'})
+        expect(parseArguments(['clear', '--pending'])).toEqual({action: 'clear', email: null, confirmed: false, clearScope: 'pending'})
+        expect(parseArguments(['--clear', '--all', '--yes'])).toEqual({action: 'clear', email: null, confirmed: true, clearScope: 'all'})
+    })
+
+    test('accepts clear scope options only with the clear action', () => {
+        expect(() => parseArguments(['--pending', '--list'])).toThrow('--confirmed, --pending, and --all can only be used with clear')
+        expect(() => parseArguments(['clear', '--pending', '--all'])).toThrow('Choose only one clear scope')
     })
 
     test('detects PM2 only for deployed backend paths', () => {
@@ -99,6 +109,60 @@ describe('launch registration administration command', () => {
         try {
             expect(await clearRegistrations(filePath)).toEqual({removed: 1})
             expect(JSON.parse(await readFile(filePath, 'utf8'))).toEqual({schemaVersion: 3, registrations: []})
+        }
+        finally {
+            await rm(home, {recursive: true, force: true})
+        }
+    })
+
+    test('resolves and clears confirmed and pending registrations together', async () => {
+        const {home, filePath} = await createDataFile([registration('ada@example.com')])
+        const pendingFilePath = resolvePendingRegistrationFile(filePath)
+        await writeFile(pendingFilePath, JSON.stringify({
+            schemaVersion: 3,
+            registrations: [registration('grace@example.com', 'Grace')],
+        }), 'utf8')
+
+        try {
+            expect(await clearByScope('all', filePath, pendingFilePath)).toEqual({confirmed: 1, pending: 1})
+            expect(JSON.parse(await readFile(filePath, 'utf8'))).toEqual({schemaVersion: 3, registrations: []})
+            expect(JSON.parse(await readFile(pendingFilePath, 'utf8'))).toEqual({schemaVersion: 3, registrations: []})
+        }
+        finally {
+            await rm(home, {recursive: true, force: true})
+        }
+    })
+
+    test('clears only the pending registrations when requested', async () => {
+        const {home, filePath} = await createDataFile([registration('ada@example.com')])
+        const pendingFilePath = resolvePendingRegistrationFile(filePath)
+        await writeFile(pendingFilePath, JSON.stringify({
+            schemaVersion: 3,
+            registrations: [registration('grace@example.com', 'Grace')],
+        }), 'utf8')
+
+        try {
+            expect(await clearByScope('pending', filePath, pendingFilePath)).toEqual({confirmed: 0, pending: 1})
+            expect(JSON.parse(await readFile(filePath, 'utf8')).registrations).toHaveLength(1)
+            expect(JSON.parse(await readFile(pendingFilePath, 'utf8')).registrations).toHaveLength(0)
+        }
+        finally {
+            await rm(home, {recursive: true, force: true})
+        }
+    })
+
+    test('clears only confirmed registrations by default', async () => {
+        const {home, filePath} = await createDataFile([registration('ada@example.com')])
+        const pendingFilePath = resolvePendingRegistrationFile(filePath)
+        await writeFile(pendingFilePath, JSON.stringify({
+            schemaVersion: 3,
+            registrations: [registration('grace@example.com', 'Grace')],
+        }), 'utf8')
+
+        try {
+            expect(await clearByScope('confirmed', filePath, pendingFilePath)).toEqual({confirmed: 1, pending: 0})
+            expect(JSON.parse(await readFile(filePath, 'utf8')).registrations).toHaveLength(0)
+            expect(JSON.parse(await readFile(pendingFilePath, 'utf8')).registrations).toHaveLength(1)
         }
         finally {
             await rm(home, {recursive: true, force: true})

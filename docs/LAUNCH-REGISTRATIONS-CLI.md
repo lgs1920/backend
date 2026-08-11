@@ -7,15 +7,21 @@ From the backend source checkout or the active production release:
 ```bash
 bun run registrations --list
 bun run registrations --remove visitor@example.org
-bun run registrations clear
+bun run registrations clear                 # confirmed only (default)
+bun run registrations clear --confirmed    # confirmed only
+bun run registrations clear --pending      # pending only
+bun run registrations clear --all          # confirmed and pending
 ```
 
-The `--remove` and `clear` commands ask for confirmation. Add `--yes` for a
-non-interactive confirmation:
+`--clear` is accepted as an alias for `clear`. All destructive commands ask
+for confirmation. Add `--yes` for a non-interactive confirmation:
 
 ```bash
 bun run registrations --remove visitor@example.org --yes
 bun run registrations clear --yes
+bun run registrations clear --confirmed --yes
+bun run registrations clear --pending --yes
+bun run registrations clear --all --yes
 ```
 
 In local development, the command reads confirmed registrations from
@@ -26,9 +32,15 @@ reads the persistent confirmed path in its generated `servers.json`; for
 example, production uses
 `/home/www/lgs1920/production/backend/shared/launch-registrations.json` and the
 backend derives the matching pending path beside it.
-Set `LGS1920_REGISTRATION_FILE` to override the confirmed file used by this
-CLI. The current destructive CLI commands operate on confirmed registrations
-only; the backend uses `LGS1920_PENDING_REGISTRATION_FILE` for its pending store.
+Clear scopes are mutually exclusive. `clear` is equivalent to
+`clear --confirmed`. The `clear --pending` variant only removes pending
+confirmations, while `clear --all` removes both stores. Each clear confirmation
+states exactly which stores will be deleted. Set
+`LGS1920_REGISTRATION_FILE` to override the confirmed file used by this
+CLI. The pending variants use
+`LGS1920_PENDING_REGISTRATION_FILE` when it is configured or the derived
+pending path beside the confirmed file otherwise. The backend uses the same
+environment variable for its pending store.
 
 When run from a deployed `production/backend/current`,
 `staging/backend/current`, or `test/backend/current` directory, the command

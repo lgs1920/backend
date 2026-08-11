@@ -115,18 +115,40 @@ Remove one registration by email address:
 bun run registrations --remove visitor@example.org
 ```
 
-Clear all registrations:
+Clear confirmed registrations (the default):
 
 ```bash
 bun run registrations clear
+bun run registrations clear --confirmed
 ```
 
-Both destructive commands ask for confirmation. Use `--yes` only when the
+`clear` is equivalent to `clear --confirmed`. To clear only pending
+confirmations:
+
+```bash
+bun run registrations clear --pending
+```
+
+Clear confirmed and pending registrations:
+
+```bash
+bun run registrations clear --all
+```
+
+`--clear` is accepted as an alias for `clear`; for example,
+`bun run registrations --clear --all`. The clear scopes are mutually
+exclusive, and the confirmation prompt identifies the stores that will be
+deleted.
+
+Destructive commands ask for confirmation. Use `--yes` only when the
 operation has already been confirmed by the operator:
 
 ```bash
 bun run registrations --remove visitor@example.org --yes
 bun run registrations clear --yes
+bun run registrations clear --confirmed --yes
+bun run registrations clear --pending --yes
+bun run registrations clear --all --yes
 ```
 
 The same commands work from an active production release:
@@ -136,6 +158,8 @@ cd /home/www/lgs1920/production/backend/current
 bun run registrations --list
 bun run registrations --remove visitor@example.org
 bun run registrations clear
+bun run registrations clear --pending
+bun run registrations clear --all
 ```
 
 For destructive operations launched from a deployed `production/backend/current`,
@@ -147,9 +171,10 @@ Deployments keep launch registrations in the shared directory outside the
 versioned release. The active production path is
 `/home/www/lgs1920/production/backend/shared/launch-registrations.json`.
 Pending confirmations are kept beside it in
-`launch-registrations-pending.json`; the current CLI commands operate on the
-confirmed file. Use an explicit data file when operating on another storage
-location:
+`launch-registrations-pending.json`; `clear` and `clear --confirmed` operate
+on the confirmed file, `clear --pending` operates on the pending file, and
+`clear --all` operates on both files. Use an explicit data file when operating
+on another storage location:
 
 ```bash
 LGS1920_REGISTRATION_FILE=/path/to/launch-registrations.json bun run registrations --list

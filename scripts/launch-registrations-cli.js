@@ -31,12 +31,13 @@ export class LaunchRegistrationCliUsageError extends Error {
  * Parse the launch-registration administration command arguments.
  *
  * @param {string[]} args Command-line arguments excluding the executable.
- * @returns {{action: 'list'|'remove'|'clear'|'help', email: string|null, confirmed: boolean}} Parsed arguments.
+ * @returns {{action: 'list'|'remove'|'clear'|'help', email: string|null, confirmed: boolean, clearScope: 'confirmed'|'pending'|'all'|null}} Parsed arguments.
  */
 export const parseArguments = (args = []) => {
     let action = null
     let email = null
     let confirmed = false
+    let clearScope = null
 
     const setAction = nextAction => {
         if (action && action !== nextAction) {
@@ -49,6 +50,14 @@ export const parseArguments = (args = []) => {
         const argument = args[index]
         if (argument === '--yes' || argument === '-y') {
             confirmed = true
+            continue
+        }
+        if (['--all', '--confirmed', '--pending'].includes(argument)) {
+            const requestedScope = argument.slice(2)
+            if (clearScope && clearScope !== requestedScope) {
+                throw new LaunchRegistrationCliUsageError('Choose only one clear scope: --confirmed, --pending, or --all')
+            }
+            clearScope = requestedScope
             continue
         }
         if (argument === '--help' || argument === '-h') {
@@ -83,10 +92,19 @@ export const parseArguments = (args = []) => {
         throw new LaunchRegistrationCliUsageError(`Unknown argument: ${argument}`)
     }
 
+    const resolvedAction = action ?? 'help'
+    if (clearScope && resolvedAction !== 'clear') {
+        throw new LaunchRegistrationCliUsageError('--confirmed, --pending, and --all can only be used with clear')
+    }
+    if (resolvedAction === 'clear' && !clearScope) {
+        clearScope = 'confirmed'
+    }
+
     return {
-        action: action ?? 'help',
+        action: resolvedAction,
         email:  email?.trim().toLowerCase() || null,
         confirmed,
+        clearScope,
     }
 }
 
@@ -123,6 +141,29 @@ export const resolveRegistrationFile = (backendHome = undefined) => {
     const configuredFile = process.env.LGS1920_REGISTRATION_FILE || readConfiguredRegistrationFile()
     const resolvedBackendHome = backendHome || process.env.LGS1920_BACKEND_HOME || process.cwd()
     return path.resolve(configuredFile || path.join(resolvedBackendHome, LAUNCH_REGISTRATION_DATA_PATH))
+}
+
+/**
+ * Resolve the pending launch-registration data file beside the confirmed file.
+ *
+ * @param {string} registrationFile Absolute confirmed-registration data path.
+ * @returns {string} Absolute pending-registration data path.
+ */
+export const resolvePendingRegistrationFile = (registrationFile) => {
+    const configuredFile = process.env.LGS1920_PENDING_REGISTRATION_FILE
+    if (configuredFile) {
+        return path.resolve(configuredFile)
+    }
+
+    const extension = path.extname(registrationFile)
+    if (extension.toLowerCase() !== '.json') {
+        return `${registrationFile}-pending`
+    }
+
+    return path.join(
+        path.dirname(registrationFile),
+        `${path.basename(registrationFile, extension)}-pending${extension}`,
+    )
 }
 
 /**
@@ -323,10 +364,65 @@ export const clearRegistrations = async (filePath) => {
     return {removed: persisted.registrations.length}
 }
 
+/**
+ * Select the data files covered by a clear scope.
+ *
+ * @param {'confirmed'|'pending'|'all'} scope Clear scope.
+ * @param {string} registrationFile Confirmed-registration data path.
+ * @param {string} pendingFile Pending-registration data path.
+ * @returns {{confirmed: string|null, pending: string|null}} Selected data store paths.
+ */
+const getClearSelection = (scope, registrationFile, pendingFile) => ({
+    confirmed: scope === 'confirmed' || scope === 'all' ? registrationFile : null,
+    pending:   scope === 'pending' || scope === 'all' ? pendingFile : null,
+})
+
+/**
+ * Read the number of records selected by a clear scope.
+ *
+ * @param {'confirmed'|'pending'|'all'} scope Clear scope.
+ * @param {string} registrationFile Confirmed-registration data path.
+ * @param {string} pendingFile Pending-registration data path.
+ * @returns {Promise<{confirmed: number, pending: number}>} Selected record counts.
+ */
+const readClearCounts = async (scope, registrationFile, pendingFile) => {
+    const selection = getClearSelection(scope, registrationFile, pendingFile)
+    const [confirmed, pending] = await Promise.all([
+        selection.confirmed ? readRegistrationFile(selection.confirmed) : {registrations: []},
+        selection.pending ? readRegistrationFile(selection.pending) : {registrations: []},
+    ])
+
+    return {
+        confirmed: confirmed.registrations.length,
+        pending:   pending.registrations.length,
+    }
+}
+
+/**
+ * Clear the data stores selected by a clear scope.
+ *
+ * @param {'confirmed'|'pending'|'all'} scope Clear scope.
+ * @param {string} registrationFile Confirmed-registration data path.
+ * @param {string} pendingFile Pending-registration data path.
+ * @returns {Promise<{confirmed: number, pending: number}>} Number of removed records by state.
+ */
+export const clearByScope = async (scope, registrationFile, pendingFile) => {
+    const selection = getClearSelection(scope, registrationFile, pendingFile)
+    const [confirmed, pending] = await Promise.all([
+        selection.confirmed ? clearRegistrations(selection.confirmed) : {removed: 0},
+        selection.pending ? clearRegistrations(selection.pending) : {removed: 0},
+    ])
+
+    return {
+        confirmed: confirmed.removed,
+        pending:   pending.removed,
+    }
+}
+
 const printHelp = () => {
     console.log('Usage: bun launch-registrations.js --list')
     console.log('       bun launch-registrations.js --remove <email> [--yes]')
-    console.log('       bun launch-registrations.js clear [--yes]')
+    console.log('       bun launch-registrations.js clear [--confirmed|--pending|--all] [--yes]')
     console.log('')
     console.log('The command operates on the backend data file selected by LGS1920_REGISTRATION_FILE or the current backend data directory.')
 }
@@ -387,17 +483,30 @@ export const run = async (args = process.argv.slice(2)) => {
         return
     }
 
-    const persisted = await readRegistrationFile(filePath)
-    if (persisted.registrations.length === 0) {
+    const pendingFilePath = resolvePendingRegistrationFile(filePath)
+    const counts = await readClearCounts(options.clearScope, filePath, pendingFilePath)
+    const confirmedCount = counts.confirmed
+    const pendingCount = counts.pending
+    if (confirmedCount === 0 && pendingCount === 0) {
         console.log('No registrations to delete.')
         return
     }
-    if (!options.confirmed && !await confirm(`Delete all ${persisted.registrations.length} registrations?`)) {
+    const question = options.clearScope === 'all'
+        ? `Delete all ${confirmedCount} confirmed and ${pendingCount} pending registrations?`
+        : options.clearScope === 'pending'
+            ? `Delete all ${pendingCount} pending registrations?`
+            : `Delete all ${confirmedCount} confirmed registrations?`
+    if (!options.confirmed && !await confirm(question)) {
         console.log('Deletion cancelled.')
         return
     }
-    const result = await withBackendStopped(() => clearRegistrations(filePath))
-    console.log(`${result.removed} registration(s) deleted.`)
+    const result = await withBackendStopped(() => clearByScope(options.clearScope, filePath, pendingFilePath))
+    const deleted = options.clearScope === 'all'
+        ? `${result.confirmed} confirmed registration(s) and ${result.pending} pending registration(s)`
+        : options.clearScope === 'pending'
+            ? `${result.pending} pending registration(s)`
+            : `${result.confirmed} confirmed registration(s)`
+    console.log(`${deleted} deleted.`)
 }
 
 if (import.meta.main) {
