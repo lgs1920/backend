@@ -64,10 +64,11 @@ install -d -m 700 /home/www/lgs1920/production/backend/shared
 install -m 600 /dev/null /home/www/lgs1920/production/backend/shared/backend.env
 ```
 
-The same shared directory stores the persistent launch-registration file at
-`/home/www/lgs1920/production/backend/shared/launch-registrations.json`.
-The backend creates that file on the first accepted registration; never place
-it inside `current` or a versioned release directory.
+The same shared directory stores the persistent launch-registration files at
+`/home/www/lgs1920/production/backend/shared/launch-registrations.json` and
+`/home/www/lgs1920/production/backend/shared/launch-registrations-pending.json`.
+The backend creates them when the corresponding state is first written; never
+place them inside `current` or a versioned release directory.
 
 The deployment command uploads the local backend `.env` file to the matching
 remote shared path through the active SSH connection. It creates the shared
@@ -96,6 +97,11 @@ send an accidental production message.
 
 The file must not be copied into `releases/<version>`, committed, printed in
 deployment logs, or exposed to browser code.
+
+The versioned backend release may retain the contact-form fallback templates
+under `messages/forms/`. `bun build.js` copies only those contact fallback files
+into the release. Launch-registration mail templates belong to the Site and are
+sent as fresh rendered bodies on the initial, resend, and confirmation requests.
 
 Keep values containing shell metacharacters quoted because the deployment
 sources this file before starting PM2. For example:
@@ -174,6 +180,11 @@ Expected failure behavior:
 - `Contact email delivery is temporarily unavailable`: verify that the PM2
   process inherited the shared environment and that the host and port are
   correct.
+- If the initial registration email is delivered but confirmation reports that
+  the additional email is unavailable, verify that the Site confirmation page
+  sends both fresh rendered bodies and that the backend release matches the
+  current API contract. No launch-registration template belongs in the backend
+  release.
 - Authentication failure: rotate the relay credential and confirm that the
   username and password belong to the same environment.
 - TLS or connection failure: check the provider's required port and whether

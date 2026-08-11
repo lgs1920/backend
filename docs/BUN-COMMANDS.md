@@ -71,8 +71,9 @@ bun build.js --version 1.0.50 --minify
 ```
 
 The generated files are written to `dist/<version>/`. The release includes
-the backend bundle, the registration administration command, and the package
-manifest needed by `bun run registrations`.
+the backend bundle, contact-form fallback templates only, the registration
+administration command, and the package manifest needed by `bun run
+registrations`. Launch-registration mail templates remain in the Site release.
 
 ## Deployment
 
@@ -145,7 +146,10 @@ paths do not invoke PM2.
 Deployments keep launch registrations in the shared directory outside the
 versioned release. The active production path is
 `/home/www/lgs1920/production/backend/shared/launch-registrations.json`.
-Use an explicit data file when operating on another storage location:
+Pending confirmations are kept beside it in
+`launch-registrations-pending.json`; the current CLI commands operate on the
+confirmed file. Use an explicit data file when operating on another storage
+location:
 
 ```bash
 LGS1920_REGISTRATION_FILE=/path/to/launch-registrations.json bun run registrations --list

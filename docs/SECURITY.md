@@ -153,8 +153,10 @@ limits. Application endpoints must still validate input and avoid exposing
 upstream errors, local paths, or credentials.
 
 The public contact and launch-registration APIs also apply an in-process rate
-limit of 10 contact-token requests, 5 contact message sends, and 5 registration
-requests per client per 15 minutes. This is a safety net, not a replacement for
+limit of 10 contact-token requests, 5 contact message sends, 5 initial
+registration requests, 3 confirmation-email resends, and 10 confirmation
+requests per client per 15 minutes. A pending address also has a 60-second
+per-email resend cooldown. This is a safety net, not a replacement for
 proxy-level rate limiting. Set
 `LGS1920_TRUST_PROXY=true` only when the backend port is private and every
 request comes through the trusted reverse proxy; otherwise the application

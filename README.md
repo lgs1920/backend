@@ -21,5 +21,5 @@ included in a release archive or Studio build.
 
 The site sends rendered Markdown messages with validated form metadata. The
 backend owns transport validation, opaque recipient resolution, SMTP delivery,
-and single-use registration cancellation links; it does not own the site's
-cancellation page or its localized content.
+and single-use registration confirmation and cancellation links; it does not
+own the site's confirmation or cancellation pages or their localized content.

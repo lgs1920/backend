@@ -2,14 +2,15 @@
 
 ## Purpose
 
-This specification defines the two messages sent after a valid contact or
-launch-registration submission:
+This specification defines the contact message pair and the staged
+launch-registration delivery flow. A valid contact submission sends:
 
 1. a support notification sent to the configured LGS1920 Studio mailbox;
 2. a separate acknowledgement sent to the visitor.
 
-The backend applies the same delivery contract to both forms through the
-shared form mail service.
+An initial launch-registration submission sends only a confirmation request to
+the visitor. After the visitor confirms, the backend sends the Studio
+notification and the final acknowledgement.
 
 ## Common data
 
@@ -18,8 +19,9 @@ shared form mail service.
 | `visitorName` | `firstName` + `lastName` | Display name in the visitor `From` and acknowledgement `To` headers |
 | `visitorEmail` | `email` | Validated visitor email address |
 | `supportMailbox` | `LGS1920_CONTACT_TARGET_<KEY>` | Server-side Studio mailbox resolved from the opaque `to` key |
-| `supportBody` | `supportRenderedMessage` or backend fallback | Message sent to Studio |
-| `acknowledgementBody` | `renderedMessage` or backend fallback | Message sent to the visitor |
+| `supportBody` | `supportRenderedMessage` or contact fallback | Message sent to Studio; launch-registration bodies always come from the Site |
+| `confirmationBody` | Site-rendered `renderedMessage` | Initial or resent launch-registration message; never persisted |
+| `acknowledgementBody` | Site-rendered `renderedMessage` or contact fallback | Contact acknowledgement or Site-rendered post-confirmation registration message |
 
 The browser sends only the opaque target key. It never supplies the resolved
 Studio email address.
@@ -54,7 +56,8 @@ The subject is:
 The body is the site-rendered `supportRenderedMessage` when present. Otherwise
 the backend uses the corresponding localized fallback. The backend sends both
 Markdown text and an HTML rendering, and appends the LGS1920 Studio logo
-footer.
+footer. For launch registration, the Site sends a fresh support body with the
+confirmation request; no backend launch-registration fallback exists.
 
 ### Nodemailer example
 
@@ -94,6 +97,30 @@ await transporter.sendMail({
 })
 ```
 
+## Launch-registration confirmation request
+
+The initial launch-registration email is sent only to the visitor and must use
+the following headers:
+
+```text
+From:     LGS1920 Studio <supportMailbox>
+To:       <visitorName> <visitorEmail>
+Reply-To: <supportMailbox>
+```
+
+The localized subjects are:
+
+| Locale | Subject |
+| --- | --- |
+| English | `[LGS1920] Confirm your registration` |
+| French | `[LGS1920] Confirmez votre inscription` |
+
+The body uses the fresh Site-rendered `renderedMessage` supplied with the
+initial or resend request. The value is not persisted. The body must contain a
+single-use Site URL with the `{{confirm-url}}` placeholder replaced.
+The confirmation request does not notify Studio and does not create a
+confirmed registration.
+
 ## Visitor acknowledgement
 
 The acknowledgement must be sent with the following headers:
@@ -119,9 +146,11 @@ The subject is localized:
 | Contact | `[LGS1920] We received your message` | `[LGS1920] Votre message a bien été reçu` |
 | Registration | `[LGS1920] Registration confirmation` | `[LGS1920] Confirmation de votre inscription` |
 
-The body is the site-rendered `renderedMessage` when present. Otherwise the
-backend uses the corresponding localized fallback. Registration acknowledgements
-must contain a single-use cancellation link generated for that registration.
+The body is the fresh Site-rendered `renderedMessage` supplied with the
+confirmation request. Contact acknowledgements may use the site-rendered
+`renderedMessage` or the contact fallback. Registration acknowledgements must
+contain a single-use cancellation link generated for that confirmed
+registration.
 
 ### Acknowledgement example
 
@@ -192,12 +221,14 @@ const sendFormMessages = async ({
 
 ## Message templates
 
-The backend fallback templates live under `messages/forms/`. The site may send
-the rendered equivalents through `supportRenderedMessage` and
+Contact-only backend fallback templates live under `messages/forms/`. Launch
+registration templates live exclusively in the Site catalog and are sent as
+transient rendered messages through `supportRenderedMessage` and
 `renderedMessage`. The supported form placeholders are `{{form}}`,
 `{{locale}}`, `{{firstName}}`, `{{lastName}}`, `{{email}}`, `{{subject}}`, and
-`{{message}}`. A site-rendered launch-registration acknowledgement may also
-use `{{revoke-url}}`.
+`{{message}}`. A pending launch-registration message may use
+`{{confirm-url}}`; a final registration acknowledgement may use
+`{{revoke-url}}`.
 
 ### Contact support notification
 
@@ -295,114 +326,47 @@ Cordialement,
 L’équipe LGS1920 Studio
 ```
 
-### Launch-registration support notification
+### Launch-registration Site catalogs
 
-Path: `messages/forms/support/launch-registration/en.md`
-
-```markdown
-# New LGS1920 Studio launch registration
-
-A visitor has registered for the LGS1920 Studio launch.
-
-## Submitted details
-
-- Form: {{form}}
-- Name: {{firstName}} {{lastName}}
-- Email: {{email}}
-
-Thank you for your attention to this registration.
-
-Kind regards,
-
-The LGS1920 Studio team
-```
-
-Path: `messages/forms/support/launch-registration/fr.md`
-
-```markdown
-# Nouvelle inscription au lancement de LGS1920 Studio
-
-Un visiteur s’est inscrit au lancement de LGS1920 Studio.
-
-## Informations transmises
-
-- Formulaire : {{form}}
-- Nom : {{firstName}} {{lastName}}
-- E-mail : {{email}}
-
-Merci de l’attention portée à cette inscription.
-
-Cordialement,
-
-L’équipe LGS1920 Studio
-```
-
-### Launch-registration acknowledgement
-
-Path: `messages/forms/launch-registration/en.md`
-
-```markdown
-# Thank you for registering for the LGS1920 Studio launch
-
-Thank you for your interest in LGS1920 Studio. Your registration has been recorded, and we will keep you informed about the launch.
-
-## Registration details
-
-Name: {{firstName}} {{lastName}}
-Email: {{email}}
-
-To cancel your registration, please click the link below.
-
-Kind regards,
-
-The LGS1920 Studio team
-```
-
-Path: `messages/forms/launch-registration/fr.md`
-
-```markdown
-# Merci pour votre inscription au lancement de LGS1920 Studio
-
-Merci de votre intérêt pour LGS1920 Studio. Votre inscription a bien été enregistrée et nous vous tiendrons informé du lancement.
-
-## Détails de l’inscription
-
-Nom : {{firstName}} {{lastName}}
-E-mail : {{email}}
-
-Pour annuler votre inscription, veuillez cliquer sur le lien ci-dessous.
-
-Cordialement,
-
-L’équipe LGS1920 Studio
-```
-
-For a registration acknowledgement, the backend appends the single-use
-cancellation link after the fixed fallback template. A site-rendered
-acknowledgement may instead include the `{{revoke-url}}` placeholder; in that
-case the backend replaces the placeholder in place.
+The initial and resend acknowledgement catalogs live in the Site repository at
+`src/_includes/form-mail/launch-registration/<locale>.md`. The confirmed
+acknowledgement catalogs live at
+`src/_includes/form-mail/launch-registration/confirmed/<locale>.md`, and the
+confirmed Studio notification catalogs live at
+`src/_includes/form-mail/support/launch-registration/confirmed/<locale>.md`.
+The Site renders these catalogs before each request. The backend replaces
+The backend replaces `{{confirm-url}}` or `{{revoke-url}}` with the corresponding
+signed URL and does not append or synthesize mail content.
 
 ## Delivery sequence
 
-For each non-honeypot submission:
+For each non-honeypot launch-registration submission:
 
 1. validate the form payload and rendered messages;
-2. reject a duplicate launch-registration email before mail configuration checks;
+2. reject a confirmed duplicate or report an existing pending confirmation;
 3. resolve `supportMailbox` from the target key;
-4. persist a new launch registration;
-5. prepare the support notification and acknowledgement;
-6. send the support notification;
-7. send the acknowledgement;
-8. return success only after both SMTP operations succeed.
+4. persist a new record in the pending-registration file;
+5. send the single confirmation request to the visitor;
+6. return `status: "pending"` only after the confirmation email is accepted.
 
-The messages are sent sequentially. If the support notification fails, the
-acknowledgement is not attempted. If the acknowledgement fails after the
-support notification was accepted, the request reports a delivery failure and
-does not automatically resend the support notification.
+The confirmation request does not notify Studio. If its delivery fails, the
+backend removes the pending record before returning the failure, so the visitor
+may retry. A resend rotates the stored token, invalidates the previous link,
+and is protected by both a per-email cooldown and endpoint rate limit.
 
-For launch registration, persistence occurs before mail delivery. If delivery
-fails, the backend rolls back that new registration before returning the
-failure, so the response reports `stored: false` and the visitor may retry.
+When the Site confirmation page handles the confirmation link:
+
+1. call `POST /launch-registration/confirm-details` to validate the token and
+   obtain the fields needed for Site rendering without consuming the token;
+2. render the final acknowledgement and Studio notification in the Site;
+3. call `POST /launch-registration/confirm` with both fresh rendered bodies;
+4. consume the confirmation token and move the record to the confirmed file;
+5. send the Studio notification and final visitor acknowledgement;
+6. return the localized success message and masked email.
+
+The confirmed state is authoritative even if the additional post-confirmation
+email is temporarily unavailable; the response includes a warning in that
+case.
 
 Honeypot submissions return a successful no-op response and send no messages.
 
@@ -411,8 +375,8 @@ Honeypot submissions return a successful no-op response and send no messages.
 - Invalid form data returns HTTP `400` without sending a message.
 - An unknown target key returns HTTP `400` without sending a message.
 - Missing or invalid SMTP configuration returns HTTP `503`.
-- SMTP delivery failures return HTTP `503` with `stored: false` for launch
-  registrations, without exposing provider details.
+- Initial confirmation-email delivery failures return HTTP `503` with
+  `stored: false`, without exposing provider details.
 - SMTP credentials, target mappings, tokens, and raw upstream errors must not be
   logged or returned to the client.
 - The SMTP relay must permit the visitor email to appear in the support
@@ -423,8 +387,7 @@ Honeypot submissions return a successful no-op response and send no messages.
 
 ## Acceptance criteria
 
-For both `contact` and `launch-registration`, an integration test must verify
-that:
+For contact, an integration test must verify that:
 
 - exactly two messages are sent for one valid submission;
 - the first message uses `visitorName <visitorEmail>` as `From` and reaches the
@@ -434,9 +397,24 @@ that:
 - the `Reply-To` values are visitor email for the support message and Studio
   mailbox for the acknowledgement;
 - localized subjects and rendered/fallback bodies are selected correctly;
-- a registration acknowledgement contains its cancellation link;
 - malformed, unauthorized, rate-limited, honeypot, and SMTP-failure cases do not
   produce unintended messages.
+
+For launch registration, integration tests must verify that:
+
+- one initial submission creates a pending record and sends exactly one
+  confirmation email to the visitor;
+- the confirmation URL is single-use and moves the record to the confirmed
+  file;
+- a pending duplicate returns `canResend: true`, and resend rotates the token;
+- resend receives and sends fresh Site-rendered confirmation content;
+- confirmation returns the masked visitor email;
+- the confirmation request receives fresh Site-rendered acknowledgement and
+  Studio-notification content, and neither body is persisted;
+- post-confirmation notification and acknowledgement contain the correct
+  localized content and cancellation link;
+- expired, malformed, unauthorized, rate-limited, honeypot, and SMTP-failure
+  cases do not create unintended confirmed records.
 
 ### Test example
 
