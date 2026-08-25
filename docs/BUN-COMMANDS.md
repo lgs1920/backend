@@ -73,7 +73,9 @@ bun build.js --version 1.0.50 --minify
 The generated files are written to `dist/<version>/`. The release includes
 the backend bundle, contact-form fallback templates only, the registration
 administration command, and the package manifest needed by `bun run
-registrations`. Launch-registration mail templates remain in the Site release.
+registrations`. It also includes the standalone backend startup and watchdog
+commands used by the deployment crontab. Launch-registration mail templates
+remain in the Site release.
 
 ## Deployment
 

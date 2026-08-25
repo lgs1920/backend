@@ -77,11 +77,10 @@ anonymous events from the client and Site reads public statistics. If those
 routes must become private, move the calls behind a server-side BFF and apply
 the internal bearer token there.
 
-The `/read` and `/convert` routes are internal-only and require the bearer
-token outside local development. The file reader accepts only files below the
-configured backend or Studio roots, rejects traversal, rejects remote URLs,
-and enforces a size limit. Changelog file reads also reject traversal and
-non-Markdown file names.
+The `/read` route is internal-only and requires the bearer token outside local
+development. The file reader accepts only files below the configured backend
+or Studio roots, rejects traversal, rejects remote URLs, and enforces a size
+limit. Changelog file reads also reject traversal and non-Markdown file names.
 
 Count event payloads may include a browser-provided IANA `timeZone` value. The
 backend validates this value and uses `LGS1920_COUNT_DEFAULT_TIME_ZONE` when it
@@ -111,7 +110,7 @@ The security changes have the following client impact:
 | --- | --- | --- |
 | Studio | Calls `ping`, `versions`, changelog, journey import, and `/count` from the browser | Keep these routes public, use the HTTPS backend proxy, and do not add the internal token to Studio. |
 | Site | Calls `/count` to display public statistics | Keep `/count` public and set `LGS1920_COUNT_API_URL` to the public HTTPS proxy URL. |
-| Any trusted server integration | May call `/read` or `/convert` | Send `Authorization: Bearer <server-token>` and keep the token server-side. |
+| Any trusted server integration | May call `/read` | Send `Authorization: Bearer <server-token>` and keep the token server-side. |
 
 Studio and Site must not call `http://api.lgs1920.fr:3333`,
 `http://api.lgs1920.fr:3334`, or `http://api.lgs1920.fr:3335` from a public
@@ -195,8 +194,8 @@ Before switching an environment to the hardened configuration:
    import, and anonymous count events.
 3. Load the Site and verify that public statistics can be read from the
    configured `LGS1920_COUNT_API_URL`.
-4. Confirm that `/read` and `/convert` return `401` without a bearer token and
-   succeed only with the matching server-side token.
+4. Confirm that `/read` returns `401` without a bearer token and succeeds only
+   with the matching server-side token.
 5. Confirm that requests from an unlisted browser origin do not receive CORS
    permission.
 6. Confirm that staging and test use their own token, backend process, data,

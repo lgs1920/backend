@@ -38,7 +38,7 @@ This is the canonical source for the LGS1920 backend AI-agent and development ru
 - Validate path parameters, query parameters, JSON, multipart data, file names, URLs, provider identifiers, and redirect targets at the boundary.
 - Prevent path traversal, SSRF, unsafe redirects, unbounded downloads, shell argument injection, and uncontrolled temporary-file growth.
 - Keep OAuth secrets, tokens, cookies, credentials, and private server configuration out of logs, responses, generated bundles, and Git.
-- Use bounded timeouts, size limits, cancellation, and cleanup for remote requests and FFmpeg jobs.
+- Use bounded timeouts, size limits, cancellation, and cleanup for remote requests and long-running jobs.
 - Return controlled client errors. Do not expose stack traces, local paths, upstream bodies, tokens, or raw process commands.
 - Make cleanup idempotent and safe when a job, request, or process has already ended.
 

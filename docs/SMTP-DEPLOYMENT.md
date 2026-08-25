@@ -38,6 +38,9 @@ LGS1920_SMTP_SECURE=true
 LGS1920_SMTP_PASSWORD=replace-with-a-secret
 LGS1920_CONTACT_CSRF_SECRET=at-least-32-random-characters
 LGS1920_CONTACT_TARGET_F7A91C=your-recipient@example.org
+# Optional watchdog notification recipient and sender.
+LGS1920_WATCHDOG_ALERT_TO=operations@example.org
+LGS1920_WATCHDOG_ALERT_FROM=backend-alerts@example.org
 # Optional timeout overrides, in milliseconds.
 LGS1920_SMTP_CONNECTION_TIMEOUT_MS=15000
 LGS1920_SMTP_GREETING_TIMEOUT_MS=10000
@@ -86,6 +89,8 @@ LGS1920_SMTP_SECURE=true
 LGS1920_SMTP_PASSWORD='replace-with-a-secret'
 LGS1920_CONTACT_CSRF_SECRET='at-least-32-random-characters'
 LGS1920_CONTACT_TARGET_F7A91C=your-recipient@example.org
+LGS1920_WATCHDOG_ALERT_TO=operations@example.org
+LGS1920_WATCHDOG_ALERT_FROM=backend-alerts@example.org
 LGS1920_SMTP_CONNECTION_TIMEOUT_MS=15000
 LGS1920_SMTP_GREETING_TIMEOUT_MS=10000
 LGS1920_SMTP_SOCKET_TIMEOUT_MS=30000
@@ -97,6 +102,14 @@ send an accidental production message.
 
 The file must not be copied into `releases/<version>`, committed, printed in
 deployment logs, or exposed to browser code.
+
+When `LGS1920_WATCHDOG_ALERT_TO` is configured, the backend deployment installs
+a user-level cron watchdog. It probes the local `/ping` endpoint every five
+minutes, waits for two consecutive failed cycles before attempting a PM2
+restart, and sends operational recovery or restart notifications through the
+configured SMTP relay. The watchdog state and logs remain in `shared`, outside
+the versioned release. If the alert recipient is omitted, the watchdog keeps
+operating and records failures without sending email.
 
 The versioned backend release may retain the contact-form fallback templates
 under `messages/forms/`. `bun build.js` copies only those contact fallback files
@@ -140,6 +153,12 @@ The Studio deployment command uploads the local backend `.env` to the shared
 backend path, then sources `../shared/backend.env` before invoking
 `pm2 startOrRestart --update-env` for backend releases. The file is therefore
 transferred as deployment configuration, not as part of the release archive.
+
+The same deployment installs an idempotent user-level crontab block containing
+the five-minute watchdog and an `@reboot` PM2 startup entry. The reboot entry
+waits briefly, loads `shared/backend.env`, and reuses the PM2 startup flow
+without requiring `sudo`. Existing user crontab entries outside the LGS1920
+marker block are preserved.
 
 Run a backend deployment from the backend repository after changing the local
 file:

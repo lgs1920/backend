@@ -21,7 +21,6 @@ import fs         from 'fs'
 import version                  from '../version.json'
 import { ChangelogResource }    from './resources/ChangelogResource'
 import { CloudAuthResource }     from './resources/CloudAuthResource.js'
-import { ConvertVideoResource } from './resources/ConvertVideoResource'
 import { LaunchRegistrationResource } from './resources/LaunchRegistrationResource.js'
 import { ContactMailResource }   from './resources/ContactMailResource.js'
 import {ContactMailService} from './services/ContactMailService.js'
@@ -37,6 +36,7 @@ import {
 } from './utils/BackendSecurity.js'
 import { resolveBackendHost } from './utils/BackendServerConfig.js'
 import {resolveSitePublicUrl} from './utils/SitePublicUrl.js'
+import {createBackendLifecycle} from './utils/BackendLifecycle.js'
 
 /** Route for accessing changelog */
 export const CHANGELOG_ROUTE = 'changelog'
@@ -46,13 +46,6 @@ export const VERSIONS_ROUTE = 'versions'
 export const PING_ROUTE = 'ping'
 /** Route for reading files */
 export const READ_FILE_ROUTE = 'read'
-/** Route for converting videos */
-export const CONVERT_VIDEO_ROUTE = {
-    convert:  'convert',
-    progress: '/progress',
-    download: '/download',
-    cancel:   '/cancel',
-}
 /** Route for journey imports */
 export const JOURNEY_ROUTE = 'journey'
 /** Route for cloud OAuth authentication */
@@ -129,6 +122,10 @@ const mailer = new ContactMailService({
 })
 const publicHttps = process.env.LGS1920_PUBLIC_HTTPS === 'true'
 const internalApiGuard = createInternalApiGuard({allowWithoutToken: isDevelopment})
+let shutdownResources = async () => undefined
+const lifecycle = createBackendLifecycle({
+    shutdown: (...args) => shutdownResources(...args),
+})
 const backendHost = resolveBackendHost({
     environmentHost: process.env.LGS1920_BACKEND_HOST,
     configuredHost:  configuration.backend.host,
@@ -141,8 +138,7 @@ const app = new Elysia() //
                  origin: allowedOrigins,
 
                  methods: ['GET', 'POST', 'DELETE'],
-                 allowedHeaders: ['Accept', 'Authorization', 'Content-Type', 'X-Conversion-Id', 'X-Request-Progress', 'X-Progress-Interval'],
-                 exposedHeaders: ['X-Conversion-Id'],
+                 allowedHeaders: ['Accept', 'Authorization', 'Content-Type'],
                  credentials:    true,
              }),
     )
@@ -181,11 +177,10 @@ app.get('/', ({redirect}) => {
 })
 
 // Initialize resource routes
-new PingResource(app)
+new PingResource(app, {isDraining: lifecycle.isDraining})
 new ReadFileResource(app, {beforeHandle: internalApiGuard})
 new VersionsResource(app)
 new ChangelogResource(app)
-new ConvertVideoResource(app, {beforeHandle: internalApiGuard})
 new CloudAuthResource(app)
 new JourneyImportResource(app)
 new LaunchRegistrationResource(app, {
@@ -199,13 +194,19 @@ new ContactMailResource(app, {
     allowedOrigins,
     mailer,
 })
-new CountResource(app, {
+const countResource = new CountResource(app, {
     backendHome:              configuration.backend.home,
-    registerShutdownHandlers: true,
+    registerShutdownHandlers: false,
 })
 
 // Start the server
 app.listen({hostname: backendHost, port: configuration.backend.port})
+
+shutdownResources = async () => {
+    await countResource.store.close()
+    await app.stop()
+}
+lifecycle.register()
 
 // Log server startup information
 const startupStatus = isHotStartup() ? `${orange}[hot reload]${reset}` : `${yellow}[start]${reset}`
