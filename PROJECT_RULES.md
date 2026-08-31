@@ -5,9 +5,12 @@ This is the canonical source for the LGS1920 backend AI-agent and development ru
 ## 1. Core directives
 
 - **Language:** All conversational responses must be in French.
-- **Documentation:** JSDoc, inline comments, code documentation, API descriptions, and project documentation must be in professional English.
+- **Documentation and issues:** JSDoc, inline comments, code documentation, API descriptions, project documentation, and issue content must be in professional English.
 - **Scope:** Inspect the current Git status before editing and preserve unrelated user changes.
-- **Autonomy:** Make safe local decisions when the intended behavior is clear. Ask before changing an external contract, deploying, publishing, or discarding user work.
+- **Autonomy:** Make safe local decisions when the intended behavior is clear. Ask before changing an external contract, deploying, publishing, or discarding user work. Never extrapolate beyond the user's request; final decisions belong to the user.
+- **Nuance and analytical rigor:** Avoid unwarranted certainty. Simplistic or overly categorical analyses can omit relevant context and lead to incorrect conclusions.
+- **Depth of analysis:** Explore relevant subtleties, cross-check perspectives, and identify potential blind spots and biases before reaching a conclusion.
+- **Technical verification:** Be especially vigilant with calculations, logic, and overall consistency. If data or reasoning appears anomalous or uncertain, explicitly identify the issue and re-check it step by step.
 - **Logging:** Use direct `console.log`, `console.error`, or `console.table` only when direct logging is explicitly requested. Never log secrets.
 
 ## 2. Coding style
@@ -18,6 +21,7 @@ This is the canonical source for the LGS1920 backend AI-agent and development ru
 - Use arrow functions for functions and class fields, except for class constructors.
 - Add a professional English JSDoc block to every new or modified function and method.
 - Keep files focused. Split a file when it becomes difficult to review or exceeds 1500 lines.
+- Provide the full file content in every code response.
 - Preserve the existing import paths and `.js` extension conventions in the files being changed.
 
 ## 3. Architecture
@@ -44,6 +48,11 @@ This is the canonical source for the LGS1920 backend AI-agent and development ru
 
 ## 5. Documentation and testing
 
+### Documentation status
+
+- Documentation must describe implemented behavior and must not cover behavior that is no longer taken into account, unless it is explicitly presented as historical.
+- Add production-oriented English comments for critical logic.
+- Add any introduced UI shortcut to the dedicated shortcuts documentation.
 - Update `README.md`, `docs/`, API descriptions, and nearby documentation when behavior or configuration changes.
 - Document environment variables, provider requirements, route contracts, limits, error codes, and deployment assumptions in English.
 - Add relevant regression tests for every behavior change. Prefer deterministic tests around pure helpers and isolated route/controller contracts.
@@ -60,12 +69,38 @@ This is the canonical source for the LGS1920 backend AI-agent and development ru
 
 ## 7. Issue and release workflow
 
+### Issue management
+
+- Before creating an issue, ask for any missing explanations or clarifications needed to understand and scope the request. Then present the complete proposed issue content for explicit user validation. Do not create the issue until the user has validated the proposal.
+- For every issue, propose a solution and an implementation plan for explicit user validation. Do not create or implement the issue until the proposed solution and plan have been validated.
+- Fill every known and applicable issue field, including title, description, assignee, labels, type, priority, repository, Project status, and `Target release`. Do not invent a release, label, priority, or other value when it is not known.
+- Assign an issue to the user requesting its creation unless the user explicitly specifies another assignee.
+- Use the Project-level `Target release` field as the source of truth for release planning. Use `Unplanned` when no approved release has been selected, and add a new target-release option only after the release has been approved.
+- When migrating an existing milestone, copy its exact title to the matching `Target release` option when one exists. Keep the milestone until the result and dependent reporting have been reviewed; do not clear or delete it automatically.
+- Use the Project `Status` value `Backlog` for accepted work that is not ready to start. Do not encode versions in labels or statuses when `Target release` already provides that information.
+- Write every issue body with a short context, requested behavior, acceptance criteria, and optional notes or questions. Keep one request per issue and prefer bullet lists for requirements.
+
 ### Cross-repository issue ownership
 
 - The managed repositories are `studio`, `site`, and `backend`. Create an issue in the repository that owns the API, service, or deployment change.
 - Never mirror a `site` or `backend` issue into `studio`. Record cross-repository dependencies with direct links to the owning issue; do not create duplicate issues.
 - During the mirror-removal migration, inventory confirmed `studio` mirrors of `backend` issues, transfer missing information to the owning issue, remove links to the mirror from the original issue and related documentation, and delete only unambiguous mirror issues.
 - Do not delete an issue with independent scope or unclear ownership. Report ambiguous cases for explicit user decision and verify that no active issue links to a deleted mirror.
+
+### Project workflow statuses
+
+Use the shared organization Project and keep its `Status` field limited to the delivery workflow:
+
+- `Triage`: new work that needs clarification, ownership, or prioritization.
+- `Backlog`: accepted work that is not ready to start.
+- `Ready`: scoped work with acceptance criteria and a target release.
+- `In Progress`: active implementation.
+- `Review`: a linked pull request is open.
+- `QA`: review is approved and validation is in progress.
+- `Blocked`: an explicit dependency or decision prevents progress.
+- `Done`: the linked pull request is merged and the work is complete.
+
+New issues start in `Triage` unless their validated scope already justifies a different workflow state. Move an issue to `Review` when its pull request opens, to `QA` after review approval, and to `Done` only after merge. Add every implementation issue to the Project and link it to its pull request.
 
 ### Release and changelog workflow
 
