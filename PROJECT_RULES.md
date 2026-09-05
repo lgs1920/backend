@@ -20,8 +20,8 @@ This is the canonical source for the LGS1920 backend AI-agent and development ru
 - Prefer named exports and do not add `export default`.
 - Use arrow functions for functions and class fields, except for class constructors.
 - Add a professional English JSDoc block to every new or modified function and method.
-- Keep files focused. Split a file when it becomes difficult to review or exceeds 1500 lines.
-- Provide the full file content in every code response.
+- Keep new files focused and below 1500 lines. For an existing file above 1500 lines, split it when necessary for the requested change; otherwise make the targeted correction and report the refactoring opportunity separately.
+- Summarize changes, validation, and remaining work with file links. Provide full file contents only when explicitly requested.
 - Preserve the existing import paths and `.js` extension conventions in the files being changed.
 
 ## 3. Architecture
@@ -73,6 +73,7 @@ This is the canonical source for the LGS1920 backend AI-agent and development ru
 
 - Before creating an issue, ask for any missing explanations or clarifications needed to understand and scope the request. Then present the complete proposed issue content for explicit user validation. Do not create the issue until the user has validated the proposal.
 - For every issue, propose a solution and an implementation plan for explicit user validation. Do not create or implement the issue until the proposed solution and plan have been validated.
+- Present the complete issue content, proposed solution, and implementation plan together for explicit validation. Reuse validation already given for the same proposal. Request renewed validation only for material changes to the approved scope, solution, or plan. A request to create an issue does not by itself validate an unseen proposal.
 - Fill every known and applicable issue field, including title, description, assignee, labels, type, priority, repository, Project status, and `Target release`. Do not invent a release, label, priority, or other value when it is not known.
 - Assign an issue to the user requesting its creation unless the user explicitly specifies another assignee.
 - Use the Project-level `Target release` field as the source of truth for release planning. Use `Unplanned` when no approved release has been selected, and add a new target-release option only after the release has been approved.
@@ -106,7 +107,7 @@ New issues start in `Triage` unless their validated scope already justifies a di
 
 - Backend release notes participate in the shared public changelog maintained in the sibling Studio repository at `../studio/public/assets/changelog/`.
 - Use the filename `YYYYMMDD-<version>.md`, where `<version>` is the exact release version including prerelease identifiers. If the target file does not exist, create it automatically with today's date and the nearest existing changelog's header conventions.
-- Group closed issues and remaining open bugs/features by owning repository (`studio`, `site`, or `backend`). Omit empty repository headings and omit a category heading when it has no entries.
+- For the shared public changelog, follow [Studio PROJECT_RULES.md §7](../studio/PROJECT_RULES.md#7-release-changelog-workflow) for sections, ordering, repository headings, and issue links. Historical formatting is not authoritative where it conflicts.
 - Link every issue to its owning repository. Never include mirror issue links or duplicate issue numbers.
 - Do not invent issue numbers, versions, dates, release membership, or user-facing outcomes.
 
