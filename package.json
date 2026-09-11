@@ -3,7 +3,7 @@
   "version": "1.0.50",
   "scripts": {
     "test": "bun test",
-    "dev": "NODE_ENV=development bun run --watch --no-clear-screen src/index.js",
+    "dev": "bun scripts/free-dev-port.mjs 3333 && NODE_ENV=development bun run --watch --no-clear-screen src/index.js",
     "deploy": "bun deploy.js",
     "registrations": "bun launch-registrations.js",
     "backend:stop": "bun backend-process.js stop",

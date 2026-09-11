@@ -16,7 +16,8 @@ inside a production release as part of routine operations.
 
 ## Development
 
-Start the backend with hot reload:
+Start the backend with hot reload. The command first releases the development
+port `3333` when another local process is listening on it:
 
 ```bash
 bun run dev
