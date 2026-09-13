@@ -103,6 +103,31 @@ The deployment requires the matching password environment variable, such as
 `LGS1920_PASSWORD_PRODUCTION`. Never place that value in a tracked file or
 print it in a command log.
 
+### GitHub Actions deployment
+
+The GitHub Actions workflow is the deployment path for shared environments.
+Dispatch a validated deployment from the current branch or commit with:
+
+```bash
+bun run deploy:github -- --test
+bun run deploy:github -- --nightly
+bun run deploy:github -- --staging
+```
+
+Production is triggered by publishing a GitHub pre-release. The shared Studio
+deployment command creates that release from the backend version metadata:
+
+```bash
+bun run deploy -- --prod --release
+bun run deploy -- --prod --release --auto
+```
+
+The first command creates a draft for review. The second publishes a
+pre-release immediately. GitHub Actions receives the production password from
+the `production` environment and the backend runtime environment from its
+`BACKEND_ENV` secret. The local `.env` file is never committed or included in
+the release archive.
+
 ## Launch registration administration
 
 List registrations without exposing cancellation token hashes:

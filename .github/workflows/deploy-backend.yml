@@ -1,0 +1,167 @@
+name: Deploy Backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment target
+        required: true
+        type: choice
+        options:
+          - test
+          - nightly
+          - staging
+      ref:
+        description: Branch or commit to deploy
+        required: true
+        default: 0.8
+        type: string
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-deploy-${{ github.event_name == 'release' && 'production' || inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Validate Backend
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.release.prerelease == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out Backend
+        uses: actions/checkout@v5
+        with:
+          path: backend
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.ref }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Backend dependencies
+        working-directory: backend
+        run: bun install
+
+      - name: Run tests
+        working-directory: backend
+        run: bun test tests/*.test.js
+
+      - name: Build Backend
+        working-directory: backend
+        env:
+          DEPLOY_PLATFORM: ${{ github.event_name == 'release' && 'production' || inputs.target }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+        run: |
+          set -euo pipefail
+
+          version="$(node -p "JSON.parse(require('fs').readFileSync('version.json', 'utf8')).backend")"
+          if [ -n "$RELEASE_TAG" ]; then
+              version="${RELEASE_TAG#v}"
+          fi
+
+          if [ "$DEPLOY_PLATFORM" = 'production' ]; then
+              bun build.js --version "$version" --minify
+          else
+              bun build.js --version "$version"
+          fi
+
+  deploy:
+    name: Deploy Backend to target
+    needs: quality
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.release.prerelease == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: ${{ github.event_name == 'release' && 'production' || inputs.target }}
+      url: https://api.lgs1920.fr
+
+    steps:
+      - name: Check out Backend
+        uses: actions/checkout@v5
+        with:
+          path: backend
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.ref }}
+
+      - name: Check out Studio deployment tools
+        uses: actions/checkout@v5
+        with:
+          repository: lgs1920/studio
+          path: studio
+          ref: main
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Backend dependencies
+        working-directory: backend
+        run: bun install
+
+      - name: Link deployment dependencies
+        run: ln -s "$GITHUB_WORKSPACE/backend/node_modules" "$GITHUB_WORKSPACE/studio/node_modules"
+
+      - name: Install deployment tools
+        run: sudo apt-get update && sudo apt-get install --yes sshpass
+
+      - name: Deploy selected target
+        working-directory: backend
+        env:
+          BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+          DEPLOY_PLATFORM: ${{ github.event_name == 'release' && 'production' || inputs.target }}
+          DEPLOY_REF: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.ref }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$DEPLOY_PASSWORD" ]; then
+              echo "DEPLOY_PASSWORD is missing from the $DEPLOY_PLATFORM environment"
+              exit 1
+          fi
+          if [ -z "$BACKEND_ENV" ]; then
+              echo "BACKEND_ENV is missing from the $DEPLOY_PLATFORM environment"
+              exit 1
+          fi
+
+          umask 077
+          trap 'rm -f .env' EXIT
+          printf '%s\n' "$BACKEND_ENV" > .env
+          export "LGS1920_PASSWORD_${DEPLOY_PLATFORM^^}=$DEPLOY_PASSWORD"
+          export LGS1920_SOURCE_REF="$(git rev-parse HEAD)"
+          export LGS1920_SOURCE_BRANCH="$DEPLOY_REF"
+
+          if [ "$DEPLOY_PLATFORM" = 'production' ]; then
+              export LGS_RELEASE_VERSION="${RELEASE_TAG#v}"
+              bun run deploy -- --prod --ci
+          elif [ "$DEPLOY_PLATFORM" = 'nightly' ]; then
+              bun run deploy -- --nightly --ci
+          elif [ "$DEPLOY_PLATFORM" = 'staging' ]; then
+              bun run deploy -- --staging --ci
+          elif [ "$DEPLOY_PLATFORM" = 'test' ]; then
+              bun run deploy -- --test --ci
+          else
+              echo "Unsupported deployment target: $DEPLOY_PLATFORM"
+              exit 1
+          fi
+
+      - name: Verify deployed Backend
+        env:
+          DEPLOY_PLATFORM: ${{ github.event_name == 'release' && 'production' || inputs.target }}
+        run: |
+          set -euo pipefail
+
+          if [ "$DEPLOY_PLATFORM" = 'production' ]; then
+              url='https://api.lgs1920.fr/ping'
+          elif [ "$DEPLOY_PLATFORM" = 'staging' ]; then
+              url='http://api.lgs1920.fr:3334/ping'
+          else
+              url='http://api.lgs1920.fr:3335/ping'
+          fi
+
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 3 --max-time 20 "$url"
+          echo "Backend is responding at $url"
