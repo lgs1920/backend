@@ -156,7 +156,7 @@ jobs:
           set -euo pipefail
 
           if [ "$DEPLOY_PLATFORM" = 'production' ]; then
-              url='https://api.lgs1920.fr/ping'
+              url='http://api.lgs1920.fr:3333/ping'
           elif [ "$DEPLOY_PLATFORM" = 'staging' ]; then
               url='http://api.lgs1920.fr:3334/ping'
           else
