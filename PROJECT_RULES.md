@@ -48,6 +48,15 @@ This is the canonical source for the LGS1920 backend AI-agent and development ru
 
 ## 5. Documentation and testing
 
+### Source file headers
+
+- Source files use the LGS1920/backend copyright header with `contact@lgs1920.fr`.
+- The repository pre-commit hook updates headers for staged source files and
+  stages those updates automatically. Use `bun run headers:check` to verify
+  staged files without changing them.
+- Preserve shebangs and test directives, and never add headers to generated
+  output or vendored assets.
+
 ### Documentation status
 
 - Documentation must describe implemented behavior and must not cover behavior that is no longer taken into account, unless it is explicitly presented as historical.
