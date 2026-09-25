@@ -5,6 +5,7 @@
     "test": "bun test",
     "dev": "bun scripts/free-dev-port.mjs 3333 && NODE_ENV=development bun run --watch --no-clear-screen src/index.js",
     "deploy": "bun deploy.js",
+    "deploy:github": "bun scripts/dispatch-deployment.mjs",
     "registrations": "bun launch-registrations.js",
     "backend:stop": "bun backend-process.js stop",
     "backend:start": "bun backend-process.js start"
@@ -20,6 +21,9 @@
     "markdown-it": "^15.0.0",
     "nanoid": "^6.0.0",
     "nodemailer": "^9.0.4",
+    "simple-git": "^3.36.0",
+    "ssh2": "^1.17.0",
+    "zip-a-folder": "^3.1.8",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
