@@ -5,6 +5,21 @@ Backend for LGS1920
 
 - [Secure backend contact mail](.aiassistant/skills/lgs-1920-backend-contact-mail/SKILL.md)
 
+## Shared agent guidance
+
+Read the shared baseline through [AGENTS.md](AGENTS.md) before the backend
+rules. After cloning, enable the local Git hooks once:
+
+```bash
+bun run git:hooks:install
+```
+
+When local guidance links are present, the pre-commit hook copies their target
+files into the commit and the post-commit hook restores the links. A standalone
+clone therefore contains physical guidance files and has no dependency on the
+local Studio directory. The same pre-commit hook updates staged source-file
+headers; use `bun run headers:check` to verify them without changing files.
+
 ## Documentation
 
 - [Backend count API flat-file analysis](docs/BACKEND-COUNT-API-FLAT-FILE-ANALYSIS.md)

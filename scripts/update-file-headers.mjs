@@ -1,0 +1,267 @@
+#!/usr/bin/env bun
+/*******************************************************************************
+ *
+ * This file is part of the LGS1920/backend project.
+ *
+ * File: update-file-headers.mjs
+ *
+ * Author : LGS1920 Team
+ * email: contact@lgs1920.fr
+ *
+ * Created on: 2026-09-25
+ * Last modified: 2026-09-25
+ *
+ *
+ * Copyright © 2026 LGS1920
+ ******************************************************************************/
+
+import {existsSync, lstatSync, readFileSync, writeFileSync} from 'node:fs'
+import {basename, extname, join, resolve} from 'node:path'
+import {spawnSync} from 'node:child_process'
+
+const repositoryRoot = resolve(import.meta.dirname, '..')
+const configurationPath = join(repositoryRoot, '.file-headers.json')
+const configuration = JSON.parse(readFileSync(configurationPath, 'utf8'))
+const SOURCE_EXTENSIONS = new Set(['.cjs', '.css', '.js', '.jsx', '.mjs', '.ts', '.tsx'])
+const IGNORED_PATH_PREFIXES = ['demo/dist/', 'dist/', 'node_modules/']
+const IGNORED_PATHS = new Set(['demo/webawesome.css'])
+const PROJECT_HEADER_PATTERN = new RegExp(`^/\\*[\\s\\S]*?This file is part of the LGS1920/${configuration.project} project\\.[\\s\\S]*?\\n \\*{3,}/\\s*`)
+
+/**
+ * Run a Git command from the repository root.
+ *
+ * @param {string[]} argumentsList Git arguments.
+ * @returns {{status: number, stdout: string, stderr: string}} Git result.
+ */
+export const runGit = argumentsList => {
+    const result = spawnSync('git', ['-C', repositoryRoot, ...argumentsList], {encoding: 'utf8'})
+
+    return {
+        status: result.status ?? 1,
+        stdout: result.stdout ?? '',
+        stderr: result.stderr ?? '',
+    }
+}
+
+/**
+ * Return today's date in the project date format.
+ *
+ * @returns {string} Current date formatted as YYYY-MM-DD.
+ */
+export const getCurrentDate = () => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        day: '2-digit',
+        month: '2-digit',
+        timeZone: 'Europe/Paris',
+        year: 'numeric',
+    }).formatToParts(new Date()).reduce((values, part) => {
+        values[part.type] = part.value
+        return values
+    }, {})
+
+    return `${parts.year}-${parts.month}-${parts.day}`
+}
+
+/**
+ * Return whether a path is an owned source file eligible for headers.
+ *
+ * @param {string} filePath Repository-relative file path.
+ * @returns {boolean} Whether the path should be processed.
+ */
+export const isSupportedSourceFile = filePath => {
+    if (!SOURCE_EXTENSIONS.has(extname(filePath).toLowerCase())) return false
+    if (IGNORED_PATHS.has(filePath)) return false
+    return !IGNORED_PATH_PREFIXES.some(prefix => filePath.startsWith(prefix))
+}
+
+/**
+ * Return the last non-empty line from command output.
+ *
+ * @param {string} output Git command output.
+ * @returns {string} Last non-empty line.
+ */
+const lastOutputLine = output => output.trim().split('\n').filter(Boolean).at(-1) ?? ''
+
+/**
+ * Return the date of the first commit that introduced a file.
+ *
+ * @param {string} filePath Repository-relative file path.
+ * @param {string} fallbackDate Date used without Git history.
+ * @returns {string} File creation date.
+ */
+export const getCreatedDate = (filePath, fallbackDate = getCurrentDate()) => {
+    const result = runGit(['log', '--follow', '--diff-filter=A', '--format=%cd', '--date=short', '--', filePath])
+    return lastOutputLine(result.stdout) || fallbackDate
+}
+
+/**
+ * Return the date of the latest committed change to a file.
+ *
+ * @param {string} filePath Repository-relative file path.
+ * @param {string} fallbackDate Date used without Git history.
+ * @returns {string} Last committed modification date.
+ */
+export const getLastCommittedDate = (filePath, fallbackDate = getCurrentDate()) => {
+    const result = runGit(['log', '--follow', '-1', '--format=%cd', '--date=short', '--', filePath])
+    return lastOutputLine(result.stdout) || fallbackDate
+}
+
+/**
+ * Return whether a file is new or differs from the current commit.
+ *
+ * @param {string} filePath Repository-relative file path.
+ * @returns {boolean} Whether the file has a current change.
+ */
+export const hasCurrentChange = filePath => runGit(['diff', '--quiet', 'HEAD', '--', filePath]).status !== 0
+
+/**
+ * Build the canonical project header for one file.
+ *
+ * @param {string} filePath Repository-relative file path.
+ * @param {string} createdDate File creation date.
+ * @param {string} modifiedDate Last modification date.
+ * @returns {string} Canonical source header.
+ */
+export const buildHeader = (filePath, createdDate, modifiedDate) => `/*******************************************************************************
+ *
+ * This file is part of the LGS1920/${configuration.project} project.
+ *
+ * File: ${basename(filePath)}
+ *
+ * Author : LGS1920 Team
+ * email: ${configuration.email}
+ *
+ * Created on: ${createdDate}
+ * Last modified: ${modifiedDate}
+ *
+ *
+ * Copyright © ${modifiedDate.slice(0, 4)} LGS1920
+ ******************************************************************************/`
+
+/**
+ * Return the interpreter and test directives that must precede a header.
+ *
+ * @param {string} content Current source content.
+ * @returns {string} Preserved prefix.
+ */
+const getPreservedPrefix = content => {
+    const shebang = content.match(/^#![^\n]*\n/)?.[0] ?? ''
+    const remainder = content.slice(shebang.length)
+    const vitestDirective = remainder.match(/^\/\/ @vitest-environment[^\n]*\n?/)?.[0] ?? ''
+    return shebang + vitestDirective
+}
+
+/**
+ * Replace or insert the canonical project header in source content.
+ *
+ * @param {string} content Current source content.
+ * @param {string} filePath Repository-relative file path.
+ * @param {string} createdDate File creation date.
+ * @param {string} modifiedDate Last modification date.
+ * @returns {string} Updated source content.
+ */
+export const updateHeader = (content, filePath, createdDate, modifiedDate) => {
+    const prefix = getPreservedPrefix(content)
+    const contentAfterPrefix = content.slice(prefix.length).replace(/^\n+/, '')
+    const contentWithoutHeader = contentAfterPrefix.replace(PROJECT_HEADER_PATTERN, '').replace(/^\n+/, '')
+    return `${prefix}${buildHeader(filePath, createdDate, modifiedDate)}\n\n${contentWithoutHeader}`
+}
+
+/**
+ * Return staged source files selected for header processing.
+ *
+ * @returns {string[]} Staged source file paths.
+ */
+export const getStagedFiles = () => runGit(['diff', '--cached', '--name-only', '--diff-filter=ACMR']).stdout
+    .split('\n')
+    .map(filePath => filePath.trim())
+    .filter(filePath => filePath && isSupportedSourceFile(filePath))
+
+/**
+ * Ensure a staged file has no unstaged changes before rewriting it.
+ *
+ * @param {string} filePath Repository-relative file path.
+ * @returns {boolean} Whether the index and worktree match.
+ */
+export const isWorktreeSynchronized = filePath => runGit(['diff', '--quiet', '--', filePath]).status === 0
+
+/**
+ * Update one source file and optionally stage the resulting content.
+ *
+ * @param {string} filePath Repository-relative file path.
+ * @param {boolean} checkOnly Whether to report differences without writing.
+ * @param {boolean} stageChanges Whether to stage the updated file.
+ * @returns {boolean} Whether processing succeeded.
+ */
+export const processFile = (filePath, checkOnly, stageChanges) => {
+    if (!existsSync(filePath) || !lstatSync(filePath).isFile()) return true
+
+    const currentDate = getCurrentDate()
+    const createdDate = getCreatedDate(filePath, currentDate)
+    const modifiedDate = hasCurrentChange(filePath) ? currentDate : getLastCommittedDate(filePath, currentDate)
+    const content = readFileSync(filePath, 'utf8')
+    const updatedContent = updateHeader(content, filePath, createdDate, modifiedDate)
+
+    if (content === updatedContent) return true
+
+    console.log(`${checkOnly ? 'Missing or outdated header' : 'Updating header'}: ${filePath}`)
+    if (checkOnly) return false
+
+    writeFileSync(filePath, updatedContent)
+    if (!stageChanges) return true
+
+    const stageResult = runGit(['add', '-f', '--', filePath])
+    if (stageResult.status === 0) return true
+
+    console.error(stageResult.stderr.trim() || `Unable to stage ${filePath}`)
+    return false
+}
+
+/**
+ * Run the header operation for every selected file.
+ *
+ * @param {string[]} filePaths Repository-relative source paths.
+ * @param {(filePath: string) => boolean} fileProcessor File operation.
+ * @returns {boolean} Whether every file succeeded.
+ */
+export const processFiles = (filePaths, fileProcessor) => filePaths.reduce(
+    (success, filePath) => fileProcessor(filePath) && success,
+    true,
+)
+
+/**
+ * Parse command-line options.
+ *
+ * @param {string[]} argumentsList Command-line arguments.
+ * @returns {{checkOnly: boolean, stageChanges: boolean, filePaths: string[]}} Parsed options.
+ */
+export const parseArguments = argumentsList => ({
+    checkOnly: argumentsList.includes('--check'),
+    stageChanges: argumentsList.includes('--stage'),
+    filePaths: argumentsList.filter(argument => !argument.startsWith('--')),
+})
+
+/**
+ * Run the header update command.
+ *
+ * @param {string[]} argumentsList Command-line arguments.
+ * @returns {number} Process exit code.
+ */
+export const main = argumentsList => {
+    const options = parseArguments(argumentsList)
+    const filePaths = argumentsList.includes('--staged') ? getStagedFiles() : options.filePaths
+    const supportedFiles = filePaths.filter(isSupportedSourceFile)
+    const unsynchronizedFiles = argumentsList.includes('--staged')
+        ? supportedFiles.filter(filePath => !isWorktreeSynchronized(filePath))
+        : []
+
+    if (unsynchronizedFiles.length > 0) {
+        console.error('Header update aborted because staged files also contain unstaged changes:')
+        unsynchronizedFiles.forEach(filePath => console.error(`- ${filePath}`))
+        return 1
+    }
+
+    return processFiles(supportedFiles, filePath => processFile(filePath, options.checkOnly, options.stageChanges)) ? 0 : 1
+}
+
+if (import.meta.main) process.exit(main(process.argv.slice(2)))
