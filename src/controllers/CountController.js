@@ -1,3 +1,19 @@
+/*******************************************************************************
+ *
+ * This file is part of the LGS1920/backend project.
+ *
+ * File: CountController.js
+ *
+ * Author : LGS1920 Team
+ * email: contact@lgs1920.fr
+ *
+ * Created on: 2026-07-29
+ * Last modified: 2026-09-25
+ *
+ *
+ * Copyright © 2026 LGS1920
+ ******************************************************************************/
+
 import { CountStore, CountValidationError } from '../services/CountStore.js'
 
 /**
@@ -49,11 +65,12 @@ export class CountController {
      * @param {string} eventType Event name.
      * @param {*} body Parsed request body.
      * @param {object} set Elysia response state.
+     * @param {boolean} [expert=false] Whether the video used Expert mode.
      * @returns {Promise<object>} Event response.
      */
-    recordEvent = async (eventType, body, set) => {
+    recordEvent = async (eventType, body, set, expert = false) => {
         try {
-            return await this.store.recordEvent(eventType, null, getEventTimeZone(body))
+            return await this.store.recordEvent(eventType, null, getEventTimeZone(body), expert)
         }
         catch (error) {
             if (error instanceof CountValidationError) {
@@ -80,20 +97,17 @@ export class CountController {
     journey = async ({body, set}) => this.recordEvent('journey', body, set)
 
     /**
-     * Record a draft video event.
+     * Record a video event with its Expert-mode classification.
      *
      * @param {object} context Elysia request context.
      * @returns {Promise<object>} Event response.
      */
-    videoDraft = async ({body, set}) => this.recordEvent('video/draft', body, set)
-
-    /**
-     * Record a high-quality video event.
-     *
-     * @param {object} context Elysia request context.
-     * @returns {Promise<object>} Event response.
-     */
-    videoHq = async ({body, set}) => this.recordEvent('video/hq', body, set)
+    video = async ({body, set}) => {
+        if (typeof body?.expert !== 'boolean') {
+            return this.errorResponse(set, 400, 'Invalid video expert flag')
+        }
+        return this.recordEvent('video', body, set, body.expert)
+    }
 
     /**
      * Read the complete aggregate snapshot.
