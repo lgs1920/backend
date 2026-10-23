@@ -7,6 +7,10 @@ description: Prepare and validate LGS1920 backend releases, including version.js
 
 Use this skill for release and deployment work. Treat `version.json` as the current backend/API version source, not the legacy `package.json` version field, and inspect the generated artifact policy before changing `dist/`.
 
+The backend release contains contact-form fallbacks only. Launch-registration
+message catalogs belong to the Site release and must not be copied into the
+backend artifact; the backend accepts fresh Site-rendered bodies at request time.
+
 ## Shared issue and changelog policy
 
 - Treat `studio`, `site`, and `backend` as separate issue repositories. Use the repository that owns the change and link directly to that issue.
@@ -31,7 +35,7 @@ Use this skill for release and deployment work. Treat `version.json` as the curr
 4. Review shared release issue data and update the Studio public changelog when the backend change belongs to a shared release. Create the target file when absent, using today's date and the established header convention.
 5. Build with the repository's Bun command and verify the output contains the expected entry point and configuration without committing secrets.
 6. Use the existing deployment platform selection (`production`, `staging`, or `test`) and inspect the resulting target before deploying.
-7. Verify version metadata, route registration, environment requirements, and generated artifact scope after the build.
+7. Verify version metadata, route registration, environment requirements, and generated artifact scope after the build. Confirm that no launch-registration template or fallback is present in the generated backend artifact.
 8. Report exact release files and uncommitted generated output. Do not deploy or publish without an explicit user request.
 
 ## Release constraints

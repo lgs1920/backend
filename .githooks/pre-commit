@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -e
+
+guidancePrepared=false
+
+restoreGuidance() {
+    if [ "$guidancePrepared" = true ]; then
+        bun scripts/vendor-agent-links.mjs restore
+    fi
+}
+
+trap restoreGuidance EXIT
+
+bun scripts/vendor-agent-links.mjs prepare
+guidancePrepared=true
+bun scripts/update-file-headers.mjs --staged --stage
+guidancePrepared=false

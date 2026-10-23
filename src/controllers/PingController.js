@@ -24,12 +24,27 @@ import { DateTime } from 'luxon'
 export class PingController extends Controller{
 
     /**
-     * Read all versions and return them
-     *
-     * @return json cotent
+     * @param {object} [options] Controller options.
+     * @param {Function} [options.isDraining=() => false] Liveness drain-state reader.
      */
+    constructor({isDraining = () => false} = {}) {
+        super()
+        this.isDraining = isDraining
+    }
 
-    ping = async () => {
+    /**
+     * Return the lightweight backend liveness response.
+     *
+     * @param {object} context Request context.
+     * @param {object} context.set Response status state.
+     * @returns {Promise<object>} Liveness response.
+     */
+    ping = async ({set}) => {
+        if (this.isDraining()) {
+            set.status = 503
+            return {alive: false, reason: 'shutting-down'}
+        }
+
         const timestamp = buildDate.date ?? Date.now()
         const date = `${DateTime.fromMillis(timestamp).toLocaleString(DateTime.DATETIME_FULL_WITH_SECONDS)}`
         return {alive: true, platform: configuration.platform, build: date, timestamp: timestamp}

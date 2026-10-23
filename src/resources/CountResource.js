@@ -1,3 +1,19 @@
+/*******************************************************************************
+ *
+ * This file is part of the LGS1920/backend project.
+ *
+ * File: CountResource.js
+ *
+ * Author : LGS1920 Team
+ * email: contact@lgs1920.fr
+ *
+ * Created on: 2026-07-29
+ * Last modified: 2026-09-25
+ *
+ *
+ * Copyright © 2026 LGS1920
+ ******************************************************************************/
+
 import { CountController } from '../controllers/CountController.js'
 import { CountStore }      from '../services/CountStore.js'
 
@@ -7,7 +23,7 @@ const COUNT_ITEM_PARAMETER = {
     name:        'item',
     in:          'path',
     required:    true,
-    description: 'Aggregate item to read. `total` returns the complete counter row; `videos` returns separate `draft` and `hq` values.',
+    description: 'Aggregate item to read. `total` returns the complete counter row; `videos` returns total and Expert video counts.',
     schema:      {
         type:   'string',
         enum:   ['total', 'visits', 'journeys', 'videos'],
@@ -117,8 +133,7 @@ export class CountResource {
 
         app.post(`${COUNT_ROUTE}/visit`, this.controller.visit, this.eventDetail('Count a visit'))
         app.post(`${COUNT_ROUTE}/journey`, this.controller.journey, this.eventDetail('Count a journey load'))
-        app.post(`${COUNT_ROUTE}/video/draft`, this.controller.videoDraft, this.eventDetail('Count a draft video'))
-        app.post(`${COUNT_ROUTE}/video/hq`, this.controller.videoHq, this.eventDetail('Count a high-quality video'))
+        app.post(`${COUNT_ROUTE}/video`, this.controller.video, this.eventDetail('Count a video export', true))
 
         app.get(COUNT_ROUTE, this.controller.getSnapshot, this.readDetail('Read the complete count snapshot'))
         app.get(`${COUNT_ROUTE}/:item`, this.controller.getItem, this.readDetail('Read a lifetime count item', [COUNT_ITEM_PARAMETER]))
@@ -138,26 +153,30 @@ export class CountResource {
      * Build OpenAPI metadata for an event route.
      *
      * @param {string} description Route description.
+     * @param {boolean} [includeExpert=false] Whether the event payload includes the Expert-mode flag.
      * @returns {object} Elysia route metadata.
      */
-    eventDetail = (description) => ({
+    eventDetail = (description, includeExpert = false) => ({
         detail: {
             tags:        ['count'],
             description,
             body:        {
                 type:       'object',
+                required: includeExpert ? ['expert'] : [],
                 properties: {
                     timeZone: {
                         type:      'string',
                         maxLength: 64,
                         example:   'America/Montreal',
                     },
+                    ...(includeExpert ? {expert: {type: 'boolean', example: false}} : {}),
                 },
                 additionalProperties: false,
             },
             produces:    ['application/json'],
             responses:   {
                 200: {description: 'Count event accepted'},
+                400: {description: 'Invalid count event payload or time zone'},
                 500: {description: 'Unable to record count event'},
             },
         },

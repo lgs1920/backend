@@ -1,0 +1,266 @@
+# Backend Bun command reference
+
+Run the commands below from the backend repository unless a production path is
+specified.
+
+## Installation and dependency checks
+
+```bash
+cd /home/christian/devs/assets/lgs1920/backend
+bun --version
+bun install
+```
+
+Run `bun install` only when installing or updating dependencies. Do not run it
+inside a production release as part of routine operations.
+
+## Development
+
+Start the backend with hot reload. The command first releases the development
+port `3333` when another local process is listening on it:
+
+```bash
+bun run dev
+```
+
+Start the entry point once without hot reload:
+
+```bash
+bun run src/index.js
+```
+
+## Tests
+
+Run the complete backend test suite:
+
+```bash
+bun test
+```
+
+The package alias is also available:
+
+```bash
+bun run test
+```
+
+Run one or more focused test files:
+
+```bash
+bun test tests/launch-registration.test.js
+bun test tests/launch-registrations-cli.test.js
+bun test tests/contact-mail.test.js
+```
+
+## Backend builds
+
+Build an unminified release directory:
+
+```bash
+bun build.js --version 1.0.50
+```
+
+The short option is equivalent:
+
+```bash
+bun build.js -v=1.0.50
+```
+
+Build the minified production bundle:
+
+```bash
+bun build.js --version 1.0.50 --minify
+```
+
+The generated files are written to `dist/<version>/`. The release includes
+the backend bundle, contact-form fallback templates only, the registration
+administration command, and the package manifest needed by `bun run
+registrations`. It also includes the standalone backend startup and watchdog
+commands used by the deployment crontab. Launch-registration mail templates
+remain in the Site release.
+
+## Deployment
+
+Show deployment help:
+
+```bash
+bun run deploy -- --help
+```
+
+Deploy the backend to production, staging, or test:
+
+```bash
+bun run deploy -- --prod
+bun run deploy -- --staging
+bun run deploy -- --test
+```
+
+Create and package a local release without copying it to the server:
+
+```bash
+bun run deploy -- --prod --dry-run
+```
+
+The deployment requires the matching password environment variable, such as
+`LGS1920_PASSWORD_PRODUCTION`. Never place that value in a tracked file or
+print it in a command log.
+
+### GitHub Actions deployment
+
+The GitHub Actions workflow is the deployment path for shared environments.
+Dispatch a validated deployment from the current branch or commit with:
+
+```bash
+bun run deploy:github -- --test
+bun run deploy:github -- --nightly
+bun run deploy:github -- --staging
+```
+
+Production is triggered by publishing a GitHub pre-release. The shared Studio
+deployment command creates that release from the backend version metadata:
+
+```bash
+bun run deploy -- --prod --release
+bun run deploy -- --prod --release --auto
+```
+
+The first command creates a draft for review. The second publishes a
+pre-release immediately. GitHub Actions receives the production password from
+the `production` environment and the backend runtime environment from its
+`BACKEND_ENV` secret. The local `.env` file is never committed or included in
+the release archive.
+
+## Launch registration administration
+
+List registrations without exposing cancellation token hashes:
+
+```bash
+bun run registrations --list
+bun run registrations --list --confirmed
+bun run registrations --list --pending
+```
+
+`--list` and `--list --confirmed` read the confirmed-registration file.
+`--list --pending` reads `launch-registrations-pending.json` and includes the
+confirmation sent and expiration dates. No token hashes are displayed.
+
+Remove one registration by email address:
+
+```bash
+bun run registrations --remove visitor@example.org
+```
+
+Clear confirmed registrations (the default):
+
+```bash
+bun run registrations clear
+bun run registrations clear --confirmed
+```
+
+`clear` is equivalent to `clear --confirmed`. To clear only pending
+confirmations:
+
+```bash
+bun run registrations clear --pending
+```
+
+Clear confirmed and pending registrations:
+
+```bash
+bun run registrations clear --all
+```
+
+`--clear` is accepted as an alias for `clear`; for example,
+`bun run registrations --clear --all`. The clear scopes are mutually
+exclusive, and the confirmation prompt identifies the stores that will be
+deleted.
+
+Destructive commands ask for confirmation. Use `--yes` only when the
+operation has already been confirmed by the operator:
+
+```bash
+bun run registrations --remove visitor@example.org --yes
+bun run registrations clear --yes
+bun run registrations clear --confirmed --yes
+bun run registrations clear --pending --yes
+bun run registrations clear --all --yes
+```
+
+The same commands work from an active production release:
+
+```bash
+cd /home/www/lgs1920/production/backend/current
+bun run registrations --list
+bun run registrations --remove visitor@example.org
+bun run registrations clear
+bun run registrations clear --pending
+bun run registrations clear --all
+```
+
+For destructive operations launched from a deployed `production/backend/current`,
+`staging/backend/current`, or `test/backend/current` directory, the command
+automatically stops and restarts the matching PM2 process. Local development
+paths do not invoke PM2.
+
+Deployments keep launch registrations in the shared directory outside the
+versioned release. The active production path is
+`/home/www/lgs1920/production/backend/shared/launch-registrations.json`.
+Pending confirmations are kept beside it in
+`launch-registrations-pending.json`; `clear` and `clear --confirmed` operate
+on the confirmed file, `clear --pending` operates on the pending file, and
+`clear --all` operates on both files. Use an explicit data file when operating
+on another storage location:
+
+```bash
+LGS1920_REGISTRATION_FILE=/path/to/launch-registrations.json bun run registrations --list
+```
+
+Override PM2 detection only when the deployment layout is non-standard:
+
+```bash
+LGS1920_PM2_APP=backend-production \
+LGS1920_PM2_BIN=/home/.bun/bin/pm2 \
+bun run registrations clear
+```
+
+## Backend process control
+
+From an active deployed backend release, stop the PM2-managed backend cleanly:
+
+```bash
+bun run backend:stop
+```
+
+Start or restart the backend with the shared environment loaded, refresh the
+PM2 environment, and save the PM2 process list:
+
+```bash
+bun run backend:start
+```
+
+These commands detect `backend-production`, `backend-staging`, or
+`backend-test` from the active release path. They fail in an ordinary local
+development checkout instead of stopping an unrelated process. For a
+non-standard layout, set `LGS1920_PM2_APP` and `LGS1920_PM2_BIN`.
+
+## Running a deployed backend manually
+
+PM2 normally owns the production process. For a controlled foreground run
+from an active release:
+
+```bash
+cd /home/www/lgs1920/production/backend/current
+bun run backend.js
+```
+
+Load the shared environment before starting the backend manually or through
+PM2. Do not print the environment file:
+
+```bash
+set -a
+. ../shared/backend.env
+set +a
+bun run backend.js
+```
+
+For the normal PM2 workflow, see
+[`SMTP-DEPLOYMENT.md`](SMTP-DEPLOYMENT.md#pm2-startup).

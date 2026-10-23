@@ -1,10 +1,26 @@
+/*******************************************************************************
+ *
+ * This file is part of the LGS1920/backend project.
+ *
+ * File: count.test.js
+ *
+ * Author : LGS1920 Team
+ * email: contact@lgs1920.fr
+ *
+ * Created on: 2026-07-29
+ * Last modified: 2026-09-25
+ *
+ *
+ * Copyright © 2026 LGS1920
+ ******************************************************************************/
+
 import { Elysia } from 'elysia'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { CountResource } from '../src/resources/CountResource.js'
-import { CountStore, getPeriodKeys, getUtcPeriodKeys } from '../src/services/CountStore.js'
+import { CountStore, getPeriodKeys, getUtcPeriodKeys, normalizeSnapshot } from '../src/services/CountStore.js'
 
 const stores = []
 const homes = []
@@ -79,19 +95,54 @@ describe('count API', () => {
         expect(getPeriodKeys(instant, 'America/Montreal').weekly).toBe('2026-W31')
     })
 
+    test('migrates legacy draft and HQ aggregates into the total video counter', () => {
+        const legacySnapshot = {
+            schemaVersion: 1,
+            total: {visits: 4, journeys: 2, videos: {draft: 3, hq: 5}},
+            daily: {'29-07-2026': {visits: 1, journeys: 0, videos: {draft: 1, hq: 2}}},
+        }
+
+        const migrated = normalizeSnapshot(legacySnapshot)
+
+        expect(migrated.schemaVersion).toBe(2)
+        expect(migrated.total.videos).toEqual({total: 8, expert: 0})
+        expect(migrated.daily['29-07-2026'].videos).toEqual({total: 3, expert: 0})
+    })
+
+    test('persists the upgraded schema after loading legacy count data', async () => {
+        const {store, home} = await createContext()
+        await writeFile(store.filePath, JSON.stringify({
+            schemaVersion: 1,
+            total: {visits: 0, journeys: 0, videos: {draft: 2, hq: 4}},
+        }))
+
+        const migratedStore = new CountStore({backendHome: home, autoPersist: false})
+        stores.push(migratedStore)
+        await migratedStore.ready
+
+        const persisted = JSON.parse(await readFile(store.filePath, 'utf8'))
+        expect(persisted.schemaVersion).toBe(2)
+        expect(persisted.total.videos).toEqual({total: 6, expert: 0})
+    })
+
     test('counts every event in all UTC aggregate periods', async () => {
         const {app, store} = await createContext()
 
-        for (const route of ['/count/visit', '/count/journey', '/count/journey', '/count/video/draft', '/count/video/hq']) {
+        for (const route of ['/count/visit', '/count/journey', '/count/journey']) {
             const response = await request(app, route, 'POST')
             expect(response.status).toBe(200)
         }
+        expect((await request(app, '/count/video', 'POST', {expert: false})).status).toBe(200)
+        expect((await request(app, '/count/video', 'POST', {expert: true})).status).toBe(200)
+        const missingExpertFlag = await request(app, '/count/video', 'POST', {timeZone: 'UTC'})
+        expect(missingExpertFlag.status).toBe(400)
+        expect(await missingExpertFlag.json()).toEqual({success: false, error: 'Invalid video expert flag'})
 
         const snapshot = await (await request(app, '/count')).json()
         expect(snapshot.total).toEqual({
             visits:  1,
             journeys: 2,
-            videos:  {draft: 1, hq: 1},
+            videos:  {total: 2, expert: 1},
         })
         expect(snapshot.daily['29-07-2026']).toEqual(snapshot.total)
         expect(snapshot.weekly['2026-W31']).toEqual(snapshot.total)
@@ -100,7 +151,7 @@ describe('count API', () => {
 
         expect(await (await request(app, '/count/visits')).json()).toBe(1)
         expect(await (await request(app, '/count/journeys')).json()).toBe(2)
-        expect(await (await request(app, '/count/videos')).json()).toEqual({draft: 1, hq: 1})
+        expect(await (await request(app, '/count/videos')).json()).toEqual({total: 2, expert: 1})
         expect(await (await request(app, '/count/visits/daily')).json()).toBe(1)
         expect(await (await request(app, '/count/daily')).json()).toEqual(snapshot.daily['29-07-2026'])
         expect(await (await request(app, '/count/daily/29-07-2026')).json()).toEqual(snapshot.daily['29-07-2026'])
@@ -109,6 +160,8 @@ describe('count API', () => {
         expect(await (await request(app, '/count/yearly/2026')).json()).toEqual(snapshot.yearly['2026'])
 
         expect((await store.getSnapshot()).total.journeys).toBe(2)
+        expect((await request(app, '/count/video/draft', 'POST')).status).toBe(404)
+        expect((await request(app, '/count/video/hq', 'POST')).status).toBe(404)
     })
 
     test('uses current UTC periods by default without creating rows during reads', async () => {
@@ -118,10 +171,10 @@ describe('count API', () => {
         const beforeRead = await readFile(store.filePath, 'utf8')
 
         setDate('2026-07-30T00:01:00.000Z')
-        expect(await (await request(app, '/count/daily')).json()).toEqual({visits: 0, journeys: 0, videos: {draft: 0, hq: 0}})
+        expect(await (await request(app, '/count/daily')).json()).toEqual({visits: 0, journeys: 0, videos: {total: 0, expert: 0}})
         expect(await (await request(app, '/count/visits/daily')).json()).toBe(0)
-        expect(await (await request(app, '/count/monthly')).json()).toEqual({visits: 1, journeys: 0, videos: {draft: 0, hq: 0}})
-        expect(await (await request(app, '/count/daily/29-07-2026')).json()).toEqual({visits: 1, journeys: 0, videos: {draft: 0, hq: 0}})
+        expect(await (await request(app, '/count/monthly')).json()).toEqual({visits: 1, journeys: 0, videos: {total: 0, expert: 0}})
+        expect(await (await request(app, '/count/daily/29-07-2026')).json()).toEqual({visits: 1, journeys: 0, videos: {total: 0, expert: 0}})
         expect(await store.getSnapshot()).toEqual(JSON.parse(beforeRead))
         expect(await readFile(store.filePath, 'utf8')).toBe(beforeRead)
     })
@@ -139,12 +192,12 @@ describe('count API', () => {
         expect(await (await request(app, '/count/daily?timeZone=Europe%2FParis')).json()).toEqual({
             visits:  1,
             journeys: 0,
-            videos:  {draft: 0, hq: 0},
+            videos:  {total: 0, expert: 0},
         })
         expect(await (await request(app, '/count/daily?timeZone=America%2FMontreal')).json()).toEqual({
             visits:  1,
             journeys: 0,
-            videos:  {draft: 0, hq: 0},
+            videos:  {total: 0, expert: 0},
         })
         expect((await store.getSnapshot()).total.visits).toBe(2)
     })
@@ -179,23 +232,23 @@ describe('count API', () => {
         expect((await store.getSnapshot()).total).toEqual({
             visits:  0,
             journeys: 0,
-            videos:  {draft: 0, hq: 0},
+            videos:  {total: 0, expert: 0},
         })
         const recovered = JSON.parse(await readFile(store.filePath, 'utf8'))
-        expect(recovered.schemaVersion).toBe(1)
+        expect(recovered.schemaVersion).toBe(2)
         expect(recovered).not.toHaveProperty('events')
     })
 
     test('persists atomically and reloads aggregate data', async () => {
         const {store, home} = await createContext()
-        await Promise.all([store.recordEvent('visit'), store.recordEvent('video/hq')])
+        await Promise.all([store.recordEvent('visit'), store.recordEvent('video', null, null, true)])
         await store.saveNow()
 
         const persisted = JSON.parse(await readFile(store.filePath, 'utf8'))
         expect(persisted.total).toEqual({
             visits:  1,
             journeys: 0,
-            videos:  {draft: 0, hq: 1},
+            videos:  {total: 1, expert: 1},
         })
 
         const reloaded = new CountStore({

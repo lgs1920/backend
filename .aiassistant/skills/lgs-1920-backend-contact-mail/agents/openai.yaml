@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Contact Mail"
+  short_description: "Secure contact mail and SMTP deployment"
+  default_prompt: "Use $lgs-1920-backend-contact-mail to modify or deploy the secure LGS1920 contact mail flow."

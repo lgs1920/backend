@@ -20,13 +20,22 @@ import { PING_ROUTE }     from '../index'
 
 export class PingResource {
 
-    controller = new PingController()
+    controller
 
-    constructor(app) {
+    /**
+     * Register the backend liveness endpoint.
+     *
+     * @param {object} app Elysia application instance.
+     * @param {object} [options] Resource options.
+     * @param {Function} [options.isDraining=() => false] Liveness drain-state reader.
+     */
+    constructor(app, {isDraining = () => false} = {}) {
         if (!app) {
             console.error('Erreur : app est undefined dans PingResource')
             throw new Error('app is undefined')
         }
+
+        this.controller = new PingController({isDraining})
         app.get(`${PING_ROUTE}`,
                 this.controller.ping,
                 {
@@ -40,6 +49,9 @@ export class PingResource {
                             },
                             500: {
                                 description: 'Internal error',
+                            },
+                            503: {
+                                description: 'Backend is draining for a controlled shutdown',
                             },
                         },
                     },

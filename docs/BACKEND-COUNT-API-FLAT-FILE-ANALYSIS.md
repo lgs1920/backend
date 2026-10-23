@@ -38,18 +38,18 @@ The backend accepts these event requests:
 ```text
 POST /count/visit
 POST /count/journey
-POST /count/video/draft
-POST /count/video/hq
+POST /count/video
 ```
 
-Event clients may send their browser time zone as a JSON body:
+Event clients send a JSON body with their browser time zone. Video events also
+include the required boolean `expert` flag:
 
 ```json
-{"timeZone":"America/Montreal"}
+{"timeZone":"America/Montreal","expert":true}
 ```
 
-The value must be a valid IANA time zone identifier. The body is optional for
-backwards compatibility; omitted values use the configured UTC fallback.
+The time zone must be a valid IANA identifier. It is optional; omitted values
+use the configured UTC fallback. The video `expert` flag is required.
 
 Each POST request performs the following work in the mutation queue:
 
@@ -101,7 +101,13 @@ Supported periods are:
 - `monthly`
 - `yearly`
 
-For `videos`, the row contains separate `draft` and `hq` counters.
+For `videos`, `total` counts every successful video export and `expert` counts
+the subset exported in Expert mode. Every video event increments `total`; an
+event with `expert: true` also increments `expert`.
+
+Schema version 2 migrates version 1 rows by summing the old `draft` and `hq`
+values into `videos.total`. Since version 1 did not record Replay mode,
+historical migrated rows use `videos.expert: 0`.
 
 GET handlers are read-only. They must not calculate aggregates, perform period rollover, increment counters, or write the file.
 
@@ -117,54 +123,39 @@ The root object stores the lifetime row and maps of aggregate rows:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "updatedAt": "2026-07-29T12:34:56.000Z",
   "total": {
     "visits": 1200,
     "journeys": 340,
-    "videos": {
-      "draft": 80,
-      "hq": 25
-    }
+    "videos": {"total": 105, "expert": 25}
   },
   "daily": {
     "29-07-2026": {
       "visits": 12,
       "journeys": 4,
-      "videos": {
-        "draft": 2,
-        "hq": 1
-      }
+      "videos": {"total": 3, "expert": 1}
     }
   },
   "weekly": {
     "2026-W31": {
       "visits": 90,
       "journeys": 20,
-      "videos": {
-        "draft": 12,
-        "hq": 4
-      }
+      "videos": {"total": 16, "expert": 4}
     }
   },
   "monthly": {
     "07-26": {
       "visits": 400,
       "journeys": 110,
-      "videos": {
-        "draft": 25,
-        "hq": 9
-      }
+      "videos": {"total": 34, "expert": 9}
     }
   },
   "yearly": {
     "2026": {
       "visits": 1200,
       "journeys": 340,
-      "videos": {
-        "draft": 80,
-        "hq": 25
-      }
+      "videos": {"total": 105, "expert": 25}
     }
   }
 }

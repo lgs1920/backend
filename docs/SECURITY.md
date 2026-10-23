@@ -41,9 +41,11 @@ LGS1920_PUBLIC_HTTPS=true
 LGS1920_MAX_READ_FILE_BYTES=5242880
 ```
 
-Use a different token, data directory, log destination, and backend port for
-each environment. Never copy a production token into staging, test, Studio,
-Site, Git, or a generated browser bundle.
+Use a different token, persistent data directory, log destination, and backend
+port for each environment. Launch-registration files belong in the private
+environment-specific `backend/shared` directory, outside versioned releases.
+Never copy a production token into staging, test, Studio, Site, Git, or a
+generated browser bundle.
 
 ## CORS policy
 
@@ -75,11 +77,10 @@ anonymous events from the client and Site reads public statistics. If those
 routes must become private, move the calls behind a server-side BFF and apply
 the internal bearer token there.
 
-The `/read` and `/convert` routes are internal-only and require the bearer
-token outside local development. The file reader accepts only files below the
-configured backend or Studio roots, rejects traversal, rejects remote URLs,
-and enforces a size limit. Changelog file reads also reject traversal and
-non-Markdown file names.
+The `/read` route is internal-only and requires the bearer token outside local
+development. The file reader accepts only files below the configured backend
+or Studio roots, rejects traversal, rejects remote URLs, and enforces a size
+limit. Changelog file reads also reject traversal and non-Markdown file names.
 
 Count event payloads may include a browser-provided IANA `timeZone` value. The
 backend validates this value and uses `LGS1920_COUNT_DEFAULT_TIME_ZONE` when it
@@ -109,7 +110,7 @@ The security changes have the following client impact:
 | --- | --- | --- |
 | Studio | Calls `ping`, `versions`, changelog, journey import, and `/count` from the browser | Keep these routes public, use the HTTPS backend proxy, and do not add the internal token to Studio. |
 | Site | Calls `/count` to display public statistics | Keep `/count` public and set `LGS1920_COUNT_API_URL` to the public HTTPS proxy URL. |
-| Any trusted server integration | May call `/read` or `/convert` | Send `Authorization: Bearer <server-token>` and keep the token server-side. |
+| Any trusted server integration | May call `/read` | Send `Authorization: Bearer <server-token>` and keep the token server-side. |
 
 Studio and Site must not call `http://api.lgs1920.fr:3333`,
 `http://api.lgs1920.fr:3334`, or `http://api.lgs1920.fr:3335` from a public
@@ -150,6 +151,16 @@ The reverse proxy should also provide request size limits, timeouts, and rate
 limits. Application endpoints must still validate input and avoid exposing
 upstream errors, local paths, or credentials.
 
+The public contact and launch-registration APIs also apply an in-process rate
+limit of 10 contact-token requests, 5 contact message sends, 5 initial
+registration requests, 3 confirmation-email resends, and 10 confirmation
+requests per client per 15 minutes. A pending address also has a 60-second
+per-email resend cooldown. This is a safety net, not a replacement for
+proxy-level rate limiting. Set
+`LGS1920_TRUST_PROXY=true` only when the backend port is private and every
+request comes through the trusted reverse proxy; otherwise the application
+uses the direct socket address and ignores `X-Forwarded-For`.
+
 ### Activation when the reverse proxy is introduced
 
 Complete the following transition before making the backend publicly
@@ -183,8 +194,8 @@ Before switching an environment to the hardened configuration:
    import, and anonymous count events.
 3. Load the Site and verify that public statistics can be read from the
    configured `LGS1920_COUNT_API_URL`.
-4. Confirm that `/read` and `/convert` return `401` without a bearer token and
-   succeed only with the matching server-side token.
+4. Confirm that `/read` returns `401` without a bearer token and succeeds only
+   with the matching server-side token.
 5. Confirm that requests from an unlisted browser origin do not receive CORS
    permission.
 6. Confirm that staging and test use their own token, backend process, data,

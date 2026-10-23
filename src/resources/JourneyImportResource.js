@@ -1,18 +1,18 @@
-/**********************************************************************************************************************
- *                                                                                                                    *
- * This file is part of the LGS1920/backend project.                                                                  *
- *                                                                                                                    *
- * File: JourneyImportResource.js                                                                                     *
- *                                                                                                                    *
- * Author : LGS1920 Team                                                                                              *
- * email: contact@lgs1920.fr                                                                                          *
- *                                                                                                                    *
- * Created on: 2026-05-02                                                                                             *
- * Last modified: 2026-05-02                                                                                          *
- *                                                                                                                    *
- *                                                                                                                    *
- * Copyright © 2026 LGS1920                                                                                           *
- **********************************************************************************************************************/
+/*******************************************************************************
+ *
+ * This file is part of the LGS1920/backend project.
+ *
+ * File: JourneyImportResource.js
+ *
+ * Author : LGS1920 Team
+ * email: contact@lgs1920.fr
+ *
+ * Created on: 2024-06-03
+ * Last modified: 2026-10-23
+ *
+ *
+ * Copyright © 2026 LGS1920
+ ******************************************************************************/
 
 import { JourneyImportController } from '../controllers/JourneyImportController.js'
 import { JOURNEY_ROUTE }           from '../index.js'
@@ -32,7 +32,7 @@ export class JourneyImportResource {
                                produces:    ['application/json'],
                                responses:   {
                                    200: {
-                                       description: 'The imported journey file content and metadata, or a controlled import failure with success=false',
+                                       description: 'The imported journey file content and metadata. Text formats use content; FIT binary files use contentBase64. Controlled failures use success=false.',
                                    },
                                    500: {
                                        description: 'Unexpected backend error',

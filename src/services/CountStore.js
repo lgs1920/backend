@@ -1,9 +1,25 @@
+/*******************************************************************************
+ *
+ * This file is part of the LGS1920/backend project.
+ *
+ * File: CountStore.js
+ *
+ * Author : LGS1920 Team
+ * email: contact@lgs1920.fr
+ *
+ * Created on: 2026-07-29
+ * Last modified: 2026-09-25
+ *
+ *
+ * Copyright © 2026 LGS1920
+ ******************************************************************************/
+
 import { randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { DateTime } from 'luxon'
 
-export const COUNT_SCHEMA_VERSION = 1
+export const COUNT_SCHEMA_VERSION = 2
 export const COUNT_DATA_PATH = path.join('data', 'count.json')
 export const COUNT_PERIODS = ['total', 'daily', 'weekly', 'monthly', 'yearly']
 export const COUNT_ITEMS = ['total', 'visits', 'journeys', 'videos']
@@ -15,8 +31,7 @@ const PERIOD_MAPS = ['daily', 'weekly', 'monthly', 'yearly']
 const EVENTS = {
     visit:  {item: 'visits'},
     journey: {item: 'journeys'},
-    'video/draft': {item: 'videos', quality: 'draft'},
-    'video/hq':    {item: 'videos', quality: 'hq'},
+    video:  {item: 'videos'},
 }
 
 /**
@@ -45,14 +60,14 @@ const isObject = (value) => value !== null && typeof value === 'object' && !Arra
 /**
  * Create an empty counter row with independent video counters.
  *
- * @returns {{visits: number, journeys: number, videos: {draft: number, hq: number}}} Empty row.
+ * @returns {{visits: number, journeys: number, videos: {total: number, expert: number}}} Empty row.
  */
 export const createEmptyCounter = () => ({
     visits:  0,
     journeys: 0,
     videos:  {
-        draft: 0,
-        hq:    0,
+        total:  0,
+        expert: 0,
     },
 })
 
@@ -214,17 +229,26 @@ const normalizeCounter = (value) => {
     const visits = readCounterNumber(value.visits)
     const journeys = readCounterNumber(value.journeys)
     const videos = isObject(value.videos) ? value.videos : {}
-    const draft = readCounterNumber(videos.draft)
-    const hq = readCounterNumber(videos.hq)
+    const isLegacyVideoRow = videos.total === undefined && videos.expert === undefined
+    const legacyDraft = readCounterNumber(videos.draft)
+    const legacyHq = readCounterNumber(videos.hq)
+    let videoTotal
+    if (isLegacyVideoRow) {
+        videoTotal = legacyDraft === null || legacyHq === null ? null : legacyDraft + legacyHq
+    }
+    else {
+        videoTotal = readCounterNumber(videos.total)
+    }
+    const expert = isLegacyVideoRow ? 0 : readCounterNumber(videos.expert)
 
-    if ([visits, journeys, draft, hq].some(candidate => candidate === null)) {
+    if ([visits, journeys, videoTotal, expert].some(candidate => candidate === null) || expert > videoTotal) {
         return null
     }
 
     return {
         visits,
         journeys,
-        videos: {draft, hq},
+        videos: {total: videoTotal, expert},
     }
 }
 
@@ -300,7 +324,7 @@ const normalizePeriodMap = (value, period) => {
  * @returns {object|null} Safe normalized snapshot, or null for corrupt data.
  */
 export const normalizeSnapshot = (value) => {
-    if (!isObject(value) || (value.schemaVersion !== undefined && value.schemaVersion !== COUNT_SCHEMA_VERSION)) {
+    if (!isObject(value) || (value.schemaVersion !== undefined && ![1, COUNT_SCHEMA_VERSION].includes(value.schemaVersion))) {
         return null
     }
 
@@ -334,12 +358,16 @@ export const normalizeSnapshot = (value) => {
  * Increment one event in a counter row.
  *
  * @param {object} counter Counter row to mutate.
- * @param {{item: string, quality?: string}} event Event descriptor.
+ * @param {{item: string}} event Event descriptor.
+ * @param {boolean} [expert=false] Whether the video was exported in Expert mode.
  * @returns {void}
  */
-const incrementCounter = (counter, event) => {
+const incrementCounter = (counter, event, expert = false) => {
     if (event.item === 'videos') {
-        counter.videos[event.quality] += 1
+        counter.videos.total += 1
+        if (expert) {
+            counter.videos.expert += 1
+        }
         return
     }
     counter[event.item] += 1
@@ -399,11 +427,15 @@ export class CountStore {
 
         try {
             const content = await readFile(this.filePath, 'utf8')
-            const loaded = normalizeSnapshot(JSON.parse(content))
+            const persistedSnapshot = JSON.parse(content)
+            const loaded = normalizeSnapshot(persistedSnapshot)
             if (!loaded) {
                 throw new CountValidationError('Invalid count snapshot')
             }
             this.snapshot = loaded
+            if (loaded.schemaVersion !== persistedSnapshot.schemaVersion) {
+                await this.writeSnapshot().catch(() => undefined)
+            }
         }
         catch {
             this.snapshot = createEmptySnapshot()
@@ -484,18 +516,23 @@ export class CountStore {
     /**
      * Record one accepted event in every required aggregate period and persist it.
      *
-     * @param {'visit'|'journey'|'video/draft'|'video/hq'} eventType Event name.
+     * @param {'visit'|'journey'|'video'} eventType Event name.
      * @param {Date|string|number} [at] Optional event timestamp for deterministic callers.
      * @param {string|null} [timeZone] Client time zone used for period resolution.
+     * @param {boolean} [expert=false] Whether the video was exported in Expert mode.
      * @returns {Promise<object>} Updated aggregate values.
      */
-    recordEvent = (eventType, at = null, timeZone = null) => {
+    recordEvent = (eventType, at = null, timeZone = null, expert = false) => {
         const event = EVENTS[eventType]
         if (!event) {
             throw new CountValidationError('Unsupported count event')
         }
         if (this.closed) {
             throw new Error('Count store is closed')
+        }
+
+        if (eventType === 'video' && typeof expert !== 'boolean') {
+            throw new CountValidationError('Invalid video expert flag')
         }
 
         const eventTimeZone = normalizeCountTimeZone(timeZone, this.timeZone)
@@ -515,7 +552,7 @@ export class CountStore {
                 }
 
                 for (const row of Object.values(periodRows)) {
-                    incrementCounter(row, event)
+                    incrementCounter(row, event, expert)
                 }
 
                 this.snapshot.updatedAt = eventDate.toISOString()
