@@ -79,7 +79,7 @@ jobs:
     timeout-minutes: 25
     environment:
       name: ${{ github.event_name == 'release' && 'production' || inputs.target }}
-      url: https://api.lgs1920.fr
+      url: ${{ github.event_name == 'release' && 'http://api.lgs1920.fr:3333' || inputs.target == 'staging' && 'http://api.lgs1920.fr:3334' || inputs.target == 'nightly' && 'http://api.lgs1920.fr:3336' || 'http://api.lgs1920.fr:3335' }}
 
     steps:
       - name: Check out Backend
@@ -159,6 +159,8 @@ jobs:
               url='http://api.lgs1920.fr:3333/ping'
           elif [ "$DEPLOY_PLATFORM" = 'staging' ]; then
               url='http://api.lgs1920.fr:3334/ping'
+          elif [ "$DEPLOY_PLATFORM" = 'nightly' ]; then
+              url='http://api.lgs1920.fr:3336/ping'
           else
               url='http://api.lgs1920.fr:3335/ping'
           fi
