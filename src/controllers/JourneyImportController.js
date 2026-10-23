@@ -8,7 +8,7 @@
  * email: contact@lgs1920.fr                                                                                          *
  *                                                                                                                    *
  * Created on: 2026-05-02                                                                                             *
- * Last modified: 2026-05-02                                                                                          *
+ * Last modified: 2026-10-23                                                                                          *
  *                                                                                                                    *
  *                                                                                                                    *
  * Copyright © 2026 LGS1920                                                                                           *
@@ -28,8 +28,13 @@ import {
     hasUsableAccessToken,
     updateCloudTokens,
 }                     from '../utils/CloudOAuthStore.js'
+import {
+    inferRemoteJourneyExtension,
+    normalizeRemoteJourneyContent,
+    REMOTE_JOURNEY_SUPPORTED_EXTENSIONS,
+} from '../utils/RemoteJourneyResponse.js'
 
-const SUPPORTED_EXTENSIONS = ['geojson', 'json', 'kml', 'gpx']
+const SUPPORTED_EXTENSIONS = REMOTE_JOURNEY_SUPPORTED_EXTENSIONS
 const DEFAULT_FILE_NAME = 'remote-journey'
 const MAX_REMOTE_JOURNEY_BYTES = 25 * 1024 * 1024
 const REMOTE_JOURNEY_FETCH_TIMEOUT_MS = 20000
@@ -323,41 +328,6 @@ const normalizeRemoteJourneyUrl = (rawUrl) => {
     return {sourceUrl: url, downloadUrl, provider: detectCloudProvider(url)}
 }
 
-const inferExtensionFromContent = (content, contentType = '') => {
-    const type = contentType.toLowerCase()
-    if (type.includes('gpx')) {
-        return 'gpx'
-    }
-    if (type.includes('kml')) {
-        return 'kml'
-    }
-    if (type.includes('geo+json')) {
-        return 'geojson'
-    }
-    if (type.includes('json')) {
-        return 'json'
-    }
-
-    const sample = content.trimStart().slice(0, 500).toLowerCase()
-    if (sample.startsWith('<gpx') || sample.includes('<gpx')) {
-        return 'gpx'
-    }
-    if (sample.startsWith('<kml') || sample.includes('<kml')) {
-        return 'kml'
-    }
-    if (sample.startsWith('{') || sample.startsWith('[')) {
-        try {
-            const data = JSON.parse(content)
-            return ['Feature', 'FeatureCollection'].includes(data?.type) ? 'geojson' : 'json'
-        }
-        catch {
-            return 'json'
-        }
-    }
-
-    return ''
-}
-
 const looksLikeHtmlPage = (content) => {
     const sample = content.trimStart().slice(0, 200).toLowerCase()
     return sample.startsWith('<!doctype html') || sample.startsWith('<html') || sample.includes('<html ')
@@ -374,7 +344,12 @@ const looksLikeCloudLoginPage = (content) => {
         || (sample.includes('nextcloud') && sample.includes('login'))
 }
 
-const resolveRemoteFileInfo = ({sourceUrl, responseUrl, contentDisposition, contentType, content, size}) => {
+/**
+ * Resolves the client-facing name and type for a downloaded journey.
+ * @param {object} options
+ * @returns {{fullName: string, name: string, extension: string, type: string, size: number}}
+ */
+const resolveRemoteFileInfo = ({sourceUrl, responseUrl, contentDisposition, contentType, content, contentBase64, size}) => {
     const candidates = [
         getFilenameFromContentDisposition(contentDisposition),
         getPathFilename(new URL(responseUrl)),
@@ -382,7 +357,12 @@ const resolveRemoteFileInfo = ({sourceUrl, responseUrl, contentDisposition, cont
     ].filter(Boolean)
 
     const candidate = candidates.find(name => getExtension(name)) ?? candidates[0] ?? DEFAULT_FILE_NAME
-    const extension = getExtension(candidate) || inferExtensionFromContent(content, contentType)
+    const extension = inferRemoteJourneyExtension({
+        fileName: candidate,
+        contentType,
+        content,
+        contentBase64,
+    })
     const name = getExtension(candidate) ? getFileBaseName(candidate) : getFileBaseName(candidate) || DEFAULT_FILE_NAME
 
     return {
@@ -412,6 +392,11 @@ const toTokenPayload = (body, previousTokens = {}) => {
 
 export class JourneyImportController extends Controller {
 
+    /**
+     * Downloads and returns an importable journey, keeping FIT bytes base64 encoded.
+     * @param {object} context
+     * @returns {Promise<object>}
+     */
     importFromUrl = async ({body, set, request}) => {
         try {
             const {sourceUrl, downloadUrl, provider} = normalizeRemoteJourneyUrl(body?.url)
@@ -422,6 +407,7 @@ export class JourneyImportController extends Controller {
                                                    contentDisposition: remote.contentDisposition,
                                                    contentType:        remote.contentType,
                                                    content:            remote.content,
+                                                   contentBase64:      remote.contentBase64,
                                                    size:               remote.size,
                                                })
 
@@ -433,7 +419,9 @@ export class JourneyImportController extends Controller {
 
             return {
                 success:     true,
-                content:     remote.content,
+                ...(remote.contentBase64
+                    ? {contentBase64: remote.contentBase64}
+                    : {content: remote.content}),
                 file,
                 sourceUrl:   sourceUrl.href,
                 downloadUrl: downloadUrl.href,
@@ -939,6 +927,11 @@ export class JourneyImportController extends Controller {
         }
     }
 
+    /**
+     * Reads a bounded upstream response without decoding FIT file bytes as text.
+     * @param {object} options
+     * @returns {Promise<object>}
+     */
     #readRemoteResponse = async ({
                                      response,
                                      responseUrl,
@@ -959,23 +952,32 @@ export class JourneyImportController extends Controller {
             })
         }
 
-        const content = new TextDecoder().decode(buffer)
-        if (looksLikeCloudLoginPage(content)) {
+        const contentType = response.headers.get('content-type') ?? contentTypeFallback
+        const contentDisposition = response.headers.get('content-disposition') ?? contentDispositionFallback
+        const responseFilename = getFilenameFromContentDisposition(contentDisposition)
+        const responsePathFilename = getPathFilename(new URL(responseUrl))
+        const isFitCandidate = contentType.toLowerCase().includes('fit')
+            || getExtension(responseFilename) === 'fit'
+            || getExtension(responsePathFilename) === 'fit'
+        const normalizedContent = normalizeRemoteJourneyContent({buffer, contentType, isFitCandidate})
+        const content = normalizedContent.content
+        const responsePreview = content ?? new TextDecoder().decode(buffer.slice(0, 500))
+        if (looksLikeCloudLoginPage(responsePreview)) {
             throw new RemoteJourneyImportError(CLOUD_AUTH_ERROR_MESSAGE, CLOUD_AUTH_ERROR_STATUS, {
                 errorCode: REMOTE_IMPORT_ERROR_CODES.CLOUD_PRIVATE_LINK,
             })
         }
-        if (looksLikeHtmlPage(content)) {
+        if (looksLikeHtmlPage(responsePreview)) {
             throw new RemoteJourneyImportError('The link returned a web page instead of an importable file.', 415, {
                 errorCode: REMOTE_IMPORT_ERROR_CODES.UNSUPPORTED_FORMAT,
             })
         }
 
         return {
-            content,
+            ...normalizedContent,
             responseUrl,
-            contentType:        response.headers.get('content-type') ?? contentTypeFallback,
-            contentDisposition: response.headers.get('content-disposition') ?? contentDispositionFallback,
+            contentType,
+            contentDisposition,
             size:               buffer.byteLength,
         }
     }
