@@ -1,3 +1,19 @@
+/*******************************************************************************
+ *
+ * This file is part of the LGS1920/backend project.
+ *
+ * File: BackendSecurity.js
+ *
+ * Author : LGS1920 Team
+ * email: contact@lgs1920.fr
+ *
+ * Created on: 2026-07-29
+ * Last modified: 2026-11-22
+ *
+ *
+ * Copyright © 2026 LGS1920
+ ******************************************************************************/
+
 import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
 
@@ -12,6 +28,7 @@ const DEFAULT_ALLOWED_ORIGINS = {
     production: [
         'https://studio.lgs1920.fr',
         'https://lgs1920.fr',
+        'https://wizzlie.lgs1920.fr',
     ],
 }
 

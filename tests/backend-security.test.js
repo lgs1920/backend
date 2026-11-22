@@ -1,3 +1,19 @@
+/*******************************************************************************
+ *
+ * This file is part of the LGS1920/backend project.
+ *
+ * File: backend-security.test.js
+ *
+ * Author : LGS1920 Team
+ * email: contact@lgs1920.fr
+ *
+ * Created on: 2026-07-29
+ * Last modified: 2026-11-22
+ *
+ *
+ * Copyright © 2026 LGS1920
+ ******************************************************************************/
+
 import { afterEach, describe, expect, test } from 'bun:test'
 import {
     createInternalApiGuard,
@@ -34,10 +50,13 @@ describe('backend security', () => {
     })
 
     test('uses exact environment-specific CORS origins', () => {
+        delete process.env.LGS1920_ALLOWED_ORIGINS
         expect(getAllowedOrigins('production')).toEqual([
             'https://studio.lgs1920.fr',
             'https://lgs1920.fr',
+            'https://wizzlie.lgs1920.fr',
         ])
+        expect(getAllowedOrigins('staging')).not.toContain('https://wizzlie.lgs1920.fr')
         process.env.LGS1920_ALLOWED_ORIGINS = 'https://studio.example.test, https://site.example.test'
         expect(getAllowedOrigins('production')).toEqual([
             'https://studio.example.test',

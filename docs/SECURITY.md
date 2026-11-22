@@ -35,7 +35,7 @@ Example production settings:
 
 ```text
 LGS1920_BACKEND_HOST=127.0.0.1
-LGS1920_ALLOWED_ORIGINS=https://studio.lgs1920.fr,https://lgs1920.fr
+LGS1920_ALLOWED_ORIGINS=https://studio.lgs1920.fr,https://lgs1920.fr,https://wizzlie.lgs1920.fr
 LGS1920_INTERNAL_API_TOKEN=<server-only-random-token>
 LGS1920_PUBLIC_HTTPS=true
 LGS1920_MAX_READ_FILE_BYTES=5242880

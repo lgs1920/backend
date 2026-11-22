@@ -133,9 +133,10 @@ and does not own the localized Site page content.
 
 The client must first call `GET /contact/token` with its exact `Origin` header,
 then submit the returned token in `csrfToken`. The backend accepts only exact
-origins from `LGS1920_ALLOWED_ORIGINS` or the platform defaults. The `to` value
-is an opaque key resolved by the backend; raw recipient email addresses are
-never accepted from the browser.
+origins from `LGS1920_ALLOWED_ORIGINS` or the platform defaults. The production
+defaults include Studio, the LGS1920 website, and Wizzlie. The `to` value is an
+opaque key resolved by the backend; raw recipient email addresses are never
+accepted from the browser.
 
 The shared email footer always links to the horizontal production logo at
 `https://lgs1920.fr/assets/logo/logo-horizontal.png`. The HTML image height is
